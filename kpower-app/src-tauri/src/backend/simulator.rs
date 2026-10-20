@@ -25,7 +25,8 @@ impl SimulatorBackend {
 impl UpsBackend for SimulatorBackend {
     fn read_snapshot(&mut self) -> UpsSnapshot {
         self.tick = self.tick.wrapping_add(1);
-        let wobble = ((self.tick + self.seed) as f32).sin() * 3.0;
+        // Stock-calibrated baselines (live KPower Data tab)
+        let wobble = ((self.tick + self.seed) as f32).sin() * 1.2;
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .map(|d| d.as_millis() as u64)
@@ -41,6 +42,7 @@ impl UpsBackend for SimulatorBackend {
                 input_voltage: 0.0,
                 output_voltage: 0.0,
                 frequency: 0.0,
+                battery_single_voltage: 0.0,
                 temperature_c: 0.0,
                 alarm_codes: vec![],
                 timestamp_ms: now,
@@ -50,13 +52,14 @@ impl UpsBackend for SimulatorBackend {
         UpsSnapshot {
             connected: true,
             mode: UpsMode::Line,
-            load_percent: 35.0 + wobble,
+            load_percent: (10.0 + wobble * 0.4).clamp(0.0, 100.0),
             battery_percent: 96.0,
-            runtime_seconds: 5400,
-            input_voltage: 230.0 + wobble,
-            output_voltage: 229.0 + wobble * 0.5,
+            runtime_seconds: (12660.0 + wobble * 20.0).max(0.0) as u32,
+            input_voltage: 218.0 + wobble,
+            output_voltage: 220.0 + wobble * 0.35,
             frequency: 50.0,
-            temperature_c: 28.0,
+            battery_single_voltage: 2.26 + wobble * 0.01,
+            temperature_c: 23.0 + wobble * 0.08,
             alarm_codes: vec![],
             timestamp_ms: now,
         }

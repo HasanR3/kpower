@@ -75,8 +75,12 @@ export function DevicePage({ snapshot }: { snapshot: UpsSnapshot | null }) {
     },
     {
       label: "Battery voltage",
-      value: !connected ? "Unknown" : snapshot!.batteryPercent > 20 ? "Normal" : "Low",
-      ok: connected && snapshot!.batteryPercent > 20,
+      value: !connected
+        ? "Unknown"
+        : snapshot!.batterySingleVoltage >= 2.0
+          ? "Normal"
+          : "Low",
+      ok: connected && snapshot!.batterySingleVoltage >= 2.0,
     },
     {
       label: "UPS fault",
@@ -184,13 +188,49 @@ export function DevicePage({ snapshot }: { snapshot: UpsSnapshot | null }) {
       ) : null}
 
       {connected && tab === "data" ? (
-        <div className="metric-grid">
-          <MetricTile Icon={Gauge} label="Output load" value={fmt(snapshot!.loadPercent, 0)} unit="%" hint="Share of rated capacity" />
-          <MetricTile Icon={BatteryMedium} label="Battery capacity" value={fmt(snapshot!.batteryPercent, 0)} unit="%" hint="Remaining charge" />
-          <MetricTile Icon={Zap} label="Voltage in" value={fmt(snapshot!.inputVoltage, 1)} unit="V" hint="Utility / input" />
-          <MetricTile Icon={PlugZap} label="Voltage out" value={fmt(snapshot!.outputVoltage, 1)} unit="V" hint="Protected output" />
-          <MetricTile Icon={Activity} label="Frequency" value={fmt(snapshot!.frequency, 1)} unit="Hz" hint="Output line frequency" />
-          <MetricTile Icon={Thermometer} label="Temperature" value={fmt(snapshot!.temperatureC, 1)} unit="°C" hint="Internal sensor" />
+        <div className="metric-grid metric-grid--stock-data" aria-label="UPS electrical data">
+          <MetricTile
+            Icon={Zap}
+            label="Input voltage"
+            value={fmt(snapshot!.inputVoltage, 1)}
+            unit="V"
+            hint="Utility / AC input"
+          />
+          <MetricTile
+            Icon={PlugZap}
+            label="Output voltage"
+            value={fmt(snapshot!.outputVoltage, 1)}
+            unit="V"
+            hint="Protected UPS output"
+          />
+          <MetricTile
+            Icon={Activity}
+            label="Input frequency"
+            value={fmt(snapshot!.frequency, 1)}
+            unit="Hz"
+            hint="Line frequency"
+          />
+          <MetricTile
+            Icon={BatteryMedium}
+            label="Battery single voltage"
+            value={fmt(snapshot!.batterySingleVoltage, 2)}
+            unit="V"
+            hint="Per-cell battery voltage"
+          />
+          <MetricTile
+            Icon={Gauge}
+            label="UPS load"
+            value={fmt(snapshot!.loadPercent, 0)}
+            unit="%"
+            hint="Share of rated capacity"
+          />
+          <MetricTile
+            Icon={Thermometer}
+            label="Temperature"
+            value={fmt(snapshot!.temperatureC, 1)}
+            unit="°C"
+            hint="Internal sensor"
+          />
         </div>
       ) : null}
 

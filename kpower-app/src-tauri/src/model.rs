@@ -10,6 +10,7 @@ pub enum UpsMode {
     Unknown,
 }
 
+/// Live UPS telemetry — mirrors stock KPower Device → Data.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UpsSnapshot {
@@ -21,6 +22,8 @@ pub struct UpsSnapshot {
     pub input_voltage: f32,
     pub output_voltage: f32,
     pub frequency: f32,
+    /// Stock: Battery Single Voltage (V per cell)
+    pub battery_single_voltage: f32,
     pub temperature_c: f32,
     pub alarm_codes: Vec<String>,
     pub timestamp_ms: u64,

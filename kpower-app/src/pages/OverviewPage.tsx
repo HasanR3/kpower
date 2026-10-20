@@ -298,16 +298,24 @@ export function OverviewPage({
           </div>
           <dl className="spec-grid">
             <div>
-              <dt>Input</dt>
+              <dt>Input voltage</dt>
               <dd>{connected ? `${snapshot!.inputVoltage.toFixed(1)} V` : "—"}</dd>
             </div>
             <div>
-              <dt>Output</dt>
+              <dt>Output voltage</dt>
               <dd>{connected ? `${snapshot!.outputVoltage.toFixed(1)} V` : "—"}</dd>
             </div>
             <div>
-              <dt>Frequency</dt>
+              <dt>Input frequency</dt>
               <dd>{connected ? `${snapshot!.frequency.toFixed(1)} Hz` : "—"}</dd>
+            </div>
+            <div>
+              <dt>Battery single voltage</dt>
+              <dd>{connected ? `${snapshot!.batterySingleVoltage.toFixed(2)} V` : "—"}</dd>
+            </div>
+            <div>
+              <dt>UPS load</dt>
+              <dd>{connected ? `${snapshot!.loadPercent.toFixed(0)} %` : "—"}</dd>
             </div>
             <div>
               <dt>Temperature</dt>

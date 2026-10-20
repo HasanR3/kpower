@@ -307,7 +307,7 @@ export function runSimulatedCommand(
     id,
     command: cmd,
     ok: true,
-    message: detail ? `${label} sent (${detail}) · simulator` : `${label} sent (simulator)`,
+    message: detail ? `${label} queued (${detail})` : `${label} queued`,
     at: Date.now(),
     detail,
   };

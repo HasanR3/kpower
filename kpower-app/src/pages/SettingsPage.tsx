@@ -1,15 +1,5 @@
 import { useState, type FormEvent, type ReactNode } from "react";
-import {
-  BatteryCharging,
-  Cable,
-  FlaskConical,
-  Mail,
-  Save,
-  Settings,
-  Shield,
-  Unplug,
-  Zap,
-} from "lucide-react";
+import { Cable, Mail, Save, Settings, Shield } from "lucide-react";
 import { PageHero } from "../components/PageHero";
 import {
   DEFAULT_SETTINGS,
@@ -17,15 +7,14 @@ import {
   saveSettings,
   type AppSettings,
 } from "../lib/appData";
-import { applySettingsRuntime, simulatorSetConnected, simulatorSetMode } from "../lib/upsStore";
+import { applySettingsRuntime } from "../lib/upsStore";
 
-type SettingsSection = "email" | "shutdown" | "general" | "simulator";
+type SettingsSection = "email" | "shutdown" | "general";
 
 const TABS: { id: SettingsSection; label: string; Icon: typeof Mail }[] = [
   { id: "email", label: "E-Mail", Icon: Mail },
   { id: "shutdown", label: "Shutdown", Icon: Shield },
   { id: "general", label: "Connectivity", Icon: Cable },
-  { id: "simulator", label: "Simulator", Icon: FlaskConical },
 ];
 
 function MetricRow({
@@ -119,7 +108,7 @@ export function SettingsPage() {
         Icon={Settings}
         kicker="Configuration"
         title="Settings"
-        subtitle="E-mail alerts, shutdown policy, connectivity, and simulator controls"
+        subtitle="E-mail alerts, shutdown policy, and USB HID connectivity"
       />
 
       <form className="settings-workspace" onSubmit={onSave}>
@@ -487,43 +476,12 @@ export function SettingsPage() {
                     />
                     <span>Minimize to system tray</span>
                   </label>
-                  <label className="choice choice--plain">
-                    <input
-                      type="checkbox"
-                      checked={settings.simulateAlarms}
-                      onChange={(e) => update("simulateAlarms", e.target.checked)}
-                    />
-                    <span>Allow simulated alarm injection</span>
-                  </label>
                 </div>
-              </div>
-            </section>
-          ) : null}
 
-          {section === "simulator" ? (
-            <section className="panel settings-surface">
-              <div className="panel__head">
-                <h2>
-                  <FlaskConical aria-hidden size={16} strokeWidth={2} /> Simulator lab
-                </h2>
-                <span className="panel__tag">Development</span>
-              </div>
-              <p className="settings-lead">
-                Drive telemetry states without UPS hardware while the HID adapter is incomplete.
-              </p>
-              <div className="sim-actions">
-                <button type="button" className="btn btn--secondary" onClick={() => simulatorSetConnected(true)}>
-                  <Cable aria-hidden size={15} strokeWidth={2} /> Connect UPS
-                </button>
-                <button type="button" className="btn btn--secondary" onClick={() => simulatorSetConnected(false)}>
-                  <Unplug aria-hidden size={15} strokeWidth={2} /> Disconnect UPS
-                </button>
-                <button type="button" className="btn btn--secondary" onClick={() => simulatorSetMode("battery")}>
-                  <BatteryCharging aria-hidden size={15} strokeWidth={2} /> Battery mode
-                </button>
-                <button type="button" className="btn btn--secondary" onClick={() => simulatorSetMode("line")}>
-                  <Zap aria-hidden size={15} strokeWidth={2} /> Line mode
-                </button>
+                <p className="settings-lead">
+                  Live telemetry comes from the MGE USB UPS (VID 0463 / PID 0001) through the HID
+                  bridge (`npm run hid` or `npm run dev:live`). There is no simulator path.
+                </p>
               </div>
             </section>
           ) : null}

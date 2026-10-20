@@ -1,41 +1,43 @@
-# KPower (Phase 1)
+# KPower
 
 Windows UPS monitor rebuild — light dashboard UI, Tauri + React.
 
-## Spec / plan
+## Real USB HID telemetry
 
-- Spec: `../docs/superpowers/specs/2026-10-20-kpower-ui-redesign-design.md`
-- Plan: `../docs/superpowers/plans/2026-10-20-kpower-foundation.md`
-
-## Run UI (browser / Vite)
-
-Application Control on this machine may block `cargo` build scripts, so Phase 1 UI can run without the native shell:
+The app reads the **MGE USB UPS** (`VID_0463` / `PID_0001`) over HID. There is **no simulator** in the live path.
 
 ```bash
 cd kpower-app
 npm install
-npm run dev
+npm run dev:live
 ```
 
-Open the printed localhost URL. A TypeScript simulator feeds live `UpsSnapshot` data once per second when Tauri IPC is unavailable.
+That starts:
+
+1. `scripts/ups-hid-bridge.mjs` — polls feature report 1 and serves `http://127.0.0.1:3921/snapshot`
+2. Vite UI — consumes that snapshot
+
+Or run the pieces separately:
+
+```bash
+npm run hid    # terminal 1
+npm run dev    # terminal 2
+```
+
+Live values match stock KPower Data tab (input/output V, frequency, battery single V, load, temperature, runtime).
+
+## Tests
 
 ```bash
 npm test
 ```
 
-## Run native (when Cargo works)
+## Native Tauri (optional)
 
-Requires Rust, Visual Studio C++ Build Tools, and Application Control allowlisting for Cargo build scripts under your cargo target directory.
+Requires Rust, VS C++ Build Tools, and WDAC allowlisting for Cargo when Application Control blocks build scripts.
 
 ```bash
 npm run tauri dev
 ```
 
-## Phase 1 scope
-
-- Device dashboard (tiles, voltage chart, power-flow mimic)
-- Nav stubs: Alarms, Schedule, Control, History, Settings
-- Simulator backend (TS always; Rust when compilable)
-- Tray Show/Quit (native only)
-
-Not yet: real USB HID, schedules, control commands, safe-shutdown, SQLite history.
+If Tauri IPC has no connected device, the UI falls back to the HID bridge — never synthetic data.
