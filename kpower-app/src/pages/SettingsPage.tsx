@@ -1,0 +1,917 @@
+import { useState, type FormEvent, type ReactNode } from "react";
+import { Activity, Cable, Mail, Radio, Save, Settings, Shield } from "lucide-react";
+import { PageHero } from "../components/PageHero";
+import {
+  DEFAULT_SETTINGS,
+  loadSettings,
+  saveSettings,
+  type AppSettings,
+} from "../lib/appData";
+import { importStockHistory } from "../lib/historyImport";
+import {
+  syncTelegramBotConfig,
+  testSmtp,
+  testTelegram,
+  testWebhook,
+} from "../lib/notifications";
+import { applySettingsRuntime, probeAlternateProtocols } from "../lib/upsStore";
+
+type SettingsSection = "monitoring" | "email" | "shutdown" | "general";
+
+const TABS: { id: SettingsSection; label: string; Icon: typeof Mail }[] = [
+  { id: "monitoring", label: "Monitoring", Icon: Activity },
+  { id: "email", label: "Notifications", Icon: Mail },
+  { id: "shutdown", label: "Shutdown", Icon: Shield },
+  { id: "general", label: "Connectivity", Icon: Cable },
+];
+
+function MetricRow({
+  label,
+  hint,
+  children,
+}: {
+  label: string;
+  hint?: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className="metric-row">
+      <div className="metric-row__copy">
+        <span className="metric-row__label">{label}</span>
+        {hint ? <span className="metric-row__hint">{hint}</span> : null}
+      </div>
+      <div className="metric-row__control">{children}</div>
+    </div>
+  );
+}
+
+function UnitInput({
+  value,
+  onChange,
+  min,
+  max,
+  unit,
+  disabled,
+  ariaLabel,
+}: {
+  value: number;
+  onChange: (n: number) => void;
+  min: number;
+  max: number;
+  unit: string;
+  disabled?: boolean;
+  ariaLabel: string;
+}) {
+  return (
+    <label className="unit-field">
+      <input
+        type="number"
+        className="input-compact"
+        min={min}
+        max={max}
+        value={value}
+        disabled={disabled}
+        aria-label={ariaLabel}
+        onChange={(e) => onChange(Number(e.target.value))}
+      />
+      <span className="unit-field__suffix">{unit}</span>
+      <span className="unit-field__range">
+        {min}–{max}
+      </span>
+    </label>
+  );
+}
+
+export function SettingsPage() {
+  const [settings, setSettings] = useState<AppSettings>(() => loadSettings());
+  const [saved, setSaved] = useState(false);
+  const [section, setSection] = useState<SettingsSection>("monitoring");
+  const [flash, setFlash] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const update = <K extends keyof AppSettings>(key: K, value: AppSettings[K]) => {
+    setSettings((s) => {
+      const next = { ...s, [key]: value };
+      if (key === "shutdownBatteryPercentAfterAcFault") {
+        next.shutdownBatteryPercent = Number(value);
+      }
+      return next;
+    });
+    setSaved(false);
+  };
+
+  const onSave = async (e: FormEvent) => {
+    e.preventDefault();
+    saveSettings(settings);
+    applySettingsRuntime(settings);
+    if (settings.telegramEnabled && settings.telegramBotToken) {
+      const r = await syncTelegramBotConfig(settings);
+      setFlash(r.message);
+    }
+    setSaved(true);
+  };
+
+  const onReset = () => {
+    setSettings(DEFAULT_SETTINGS);
+    setSaved(false);
+  };
+
+  return (
+    <section className="page enterprise-page">
+      <PageHero
+        Icon={Settings}
+        kicker="Configuration"
+        title="Settings"
+        subtitle="Monitoring thresholds, notifications, shutdown policy, and HID connectivity"
+      />
+
+      <form className="settings-workspace" onSubmit={onSave}>
+        <div className="settings-tabs" role="tablist" aria-label="Settings sections">
+          {TABS.map(({ id, label, Icon }) => (
+            <button
+              key={id}
+              type="button"
+              role="tab"
+              aria-selected={section === id}
+              className={section === id ? "settings-tab is-active" : "settings-tab"}
+              onClick={() => setSection(id)}
+            >
+              <Icon aria-hidden size={15} strokeWidth={2} />
+              {label}
+            </button>
+          ))}
+        </div>
+
+        <div className="settings-body" role="tabpanel">
+          {section === "monitoring" ? (
+            <>
+              <section className="panel settings-surface">
+                <div className="panel__head">
+                  <h2>
+                    <Activity aria-hidden size={16} strokeWidth={2} /> Monitoring
+                  </h2>
+                </div>
+                <MetricRow label="Poll interval" hint="How often the HID bridge is queried">
+                  <UnitInput
+                    value={settings.pollIntervalMs}
+                    min={500}
+                    max={10000}
+                    unit="ms"
+                    ariaLabel="Poll interval milliseconds"
+                    onChange={(n) => update("pollIntervalMs", n)}
+                  />
+                </MetricRow>
+                <MetricRow label="History retention" hint="Local samples kept for charts">
+                  <UnitInput
+                    value={settings.historyRetentionDays}
+                    min={1}
+                    max={365}
+                    unit="days"
+                    ariaLabel="History retention days"
+                    onChange={(n) => update("historyRetentionDays", n)}
+                  />
+                </MetricRow>
+                <label className="toggle-row">
+                  <span>
+                    <strong>Allow control</strong>
+                    <span className="toggle-row__hint">
+                      Off by default. Also requires npm run hid:control (ALLOW_HID_CONTROL=1).
+                    </span>
+                  </span>
+                  <input
+                    type="checkbox"
+                    checked={settings.allowControl}
+                    onChange={(e) => update("allowControl", e.target.checked)}
+                  />
+                </label>
+                <div className="settings-actions-row">
+                  <button
+                    type="button"
+                    className="btn btn--secondary"
+                    disabled={busy}
+                    onClick={async () => {
+                      setBusy(true);
+                      const r = await importStockHistory();
+                      setFlash(r.message);
+                      setBusy(false);
+                    }}
+                  >
+                    Import stock history
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn--secondary"
+                    disabled={busy}
+                    onClick={async () => {
+                      setBusy(true);
+                      saveSettings(settings);
+                      const r = await probeAlternateProtocols(settings);
+                      setFlash(r.message);
+                      setBusy(false);
+                    }}
+                  >
+                    Test SNMP / NUT
+                  </button>
+                </div>
+                {flash ? <p className="flash" role="status">{flash}</p> : null}
+              </section>
+
+              <section className="panel settings-surface">
+                <div className="panel__head">
+                  <h2>Alarm thresholds</h2>
+                </div>
+                <MetricRow label="Load warning">
+                  <UnitInput
+                    value={settings.alarmLoadWarnPercent}
+                    min={1}
+                    max={100}
+                    unit="%"
+                    ariaLabel="Load warning percent"
+                    onChange={(n) => update("alarmLoadWarnPercent", n)}
+                  />
+                </MetricRow>
+                <MetricRow label="Load critical">
+                  <UnitInput
+                    value={settings.alarmLoadCritPercent}
+                    min={1}
+                    max={100}
+                    unit="%"
+                    ariaLabel="Load critical percent"
+                    onChange={(n) => update("alarmLoadCritPercent", n)}
+                  />
+                </MetricRow>
+                <MetricRow label="Battery warning">
+                  <UnitInput
+                    value={settings.alarmBatteryWarnPercent}
+                    min={1}
+                    max={100}
+                    unit="%"
+                    ariaLabel="Battery warning percent"
+                    onChange={(n) => update("alarmBatteryWarnPercent", n)}
+                  />
+                </MetricRow>
+                <MetricRow label="Battery critical">
+                  <UnitInput
+                    value={settings.alarmBatteryCritPercent}
+                    min={1}
+                    max={100}
+                    unit="%"
+                    ariaLabel="Battery critical percent"
+                    onChange={(n) => update("alarmBatteryCritPercent", n)}
+                  />
+                </MetricRow>
+                <MetricRow label="Runtime warning (on battery)">
+                  <UnitInput
+                    value={Math.round(settings.alarmRuntimeWarnSeconds / 60)}
+                    min={1}
+                    max={120}
+                    unit="min"
+                    ariaLabel="Runtime warning minutes"
+                    onChange={(n) => update("alarmRuntimeWarnSeconds", n * 60)}
+                  />
+                </MetricRow>
+                <MetricRow label="Voltage nominal / tolerance">
+                  <div className="settings-inline-pair">
+                    <UnitInput
+                      value={settings.alarmVoltageNominal}
+                      min={100}
+                      max={250}
+                      unit="V"
+                      ariaLabel="Nominal voltage"
+                      onChange={(n) => update("alarmVoltageNominal", n)}
+                    />
+                    <UnitInput
+                      value={settings.alarmVoltageTolPercent}
+                      min={1}
+                      max={30}
+                      unit="%"
+                      ariaLabel="Voltage tolerance percent"
+                      onChange={(n) => update("alarmVoltageTolPercent", n)}
+                    />
+                  </div>
+                </MetricRow>
+                <MetricRow label="Temperature warning">
+                  <UnitInput
+                    value={settings.alarmTempWarnC}
+                    min={20}
+                    max={70}
+                    unit="°C"
+                    ariaLabel="Temperature warning"
+                    onChange={(n) => update("alarmTempWarnC", n)}
+                  />
+                </MetricRow>
+              </section>
+
+              <section className="panel settings-surface">
+                <div className="panel__head">
+                  <h2>
+                    <Radio aria-hidden size={16} strokeWidth={2} /> Protocol stubs
+                  </h2>
+                </div>
+                <p className="banner" role="status">
+                  HID is primary. When enabled, SNMP/NUT can be probed via the bridge (Test SNMP /
+                  NUT). Successful probes update live telemetry only if HID is offline.
+                </p>
+                <label className="toggle-row">
+                  <span>
+                    <strong>SNMP (stub)</strong>
+                  </span>
+                  <input
+                    type="checkbox"
+                    checked={settings.snmpEnabled}
+                    onChange={(e) => update("snmpEnabled", e.target.checked)}
+                  />
+                </label>
+                <div className="form-grid form-grid--2" data-disabled={!settings.snmpEnabled || undefined}>
+                  <label className="field">
+                    <span>Host</span>
+                    <input
+                      value={settings.snmpHost}
+                      disabled={!settings.snmpEnabled}
+                      onChange={(e) => update("snmpHost", e.target.value)}
+                      placeholder="192.168.1.10"
+                    />
+                  </label>
+                  <label className="field">
+                    <span>Community</span>
+                    <input
+                      type="password"
+                      value={settings.snmpCommunity}
+                      disabled={!settings.snmpEnabled}
+                      onChange={(e) => update("snmpCommunity", e.target.value)}
+                      placeholder="not used yet"
+                    />
+                  </label>
+                </div>
+                <label className="toggle-row">
+                  <span>
+                    <strong>NUT (stub)</strong>
+                  </span>
+                  <input
+                    type="checkbox"
+                    checked={settings.nutEnabled}
+                    onChange={(e) => update("nutEnabled", e.target.checked)}
+                  />
+                </label>
+                <div className="form-grid form-grid--2" data-disabled={!settings.nutEnabled || undefined}>
+                  <label className="field">
+                    <span>Host</span>
+                    <input
+                      value={settings.nutHost}
+                      disabled={!settings.nutEnabled}
+                      onChange={(e) => update("nutHost", e.target.value)}
+                    />
+                  </label>
+                  <label className="field">
+                    <span>UPS name</span>
+                    <input
+                      value={settings.nutUpsName}
+                      disabled={!settings.nutEnabled}
+                      onChange={(e) => update("nutUpsName", e.target.value)}
+                    />
+                  </label>
+                </div>
+              </section>
+            </>
+          ) : null}
+
+          {section === "email" ? (
+            <section className="panel settings-surface">
+              <div className="panel__head">
+                <h2>
+                  <Mail aria-hidden size={16} strokeWidth={2} /> E-Mail notifications
+                </h2>
+              </div>
+
+              <p className="banner" role="status">
+                Delivery goes through the HID bridge. Use Test buttons below — success only means the
+                provider accepted the message, not that a human read it.
+              </p>
+
+              <label className="toggle-row">
+                <span>
+                  <strong>Enable e-mail notifications</strong>
+                  <span className="toggle-row__hint">SMTP delivery for alarm and power events</span>
+                </span>
+                <input
+                  type="checkbox"
+                  checked={settings.emailEnabled}
+                  onChange={(e) => update("emailEnabled", e.target.checked)}
+                />
+              </label>
+
+              <div className="settings-block" data-disabled={!settings.emailEnabled || undefined}>
+                <div className="form-grid form-grid--2">
+                  <label className="field">
+                    <span>SMTP host</span>
+                    <input
+                      value={settings.emailSmtpHost}
+                      disabled={!settings.emailEnabled}
+                      onChange={(e) => update("emailSmtpHost", e.target.value)}
+                      placeholder="smtp.example.com"
+                    />
+                  </label>
+                  <label className="field">
+                    <span>SMTP port</span>
+                    <input
+                      type="number"
+                      className="input-compact"
+                      min={1}
+                      max={65535}
+                      value={settings.emailSmtpPort}
+                      disabled={!settings.emailEnabled}
+                      onChange={(e) => update("emailSmtpPort", Number(e.target.value))}
+                    />
+                  </label>
+                  <label className="field">
+                    <span>Username</span>
+                    <input
+                      value={settings.emailUsername}
+                      disabled={!settings.emailEnabled}
+                      onChange={(e) => update("emailUsername", e.target.value)}
+                    />
+                  </label>
+                  <label className="field">
+                    <span>Password</span>
+                    <input
+                      type="password"
+                      value={settings.emailPassword}
+                      disabled={!settings.emailEnabled}
+                      onChange={(e) => update("emailPassword", e.target.value)}
+                    />
+                  </label>
+                  <label className="field">
+                    <span>From address</span>
+                    <input
+                      value={settings.emailFrom}
+                      disabled={!settings.emailEnabled}
+                      onChange={(e) => update("emailFrom", e.target.value)}
+                    />
+                  </label>
+                  <label className="field">
+                    <span>To address</span>
+                    <input
+                      value={settings.emailTo}
+                      disabled={!settings.emailEnabled}
+                      onChange={(e) => update("emailTo", e.target.value)}
+                    />
+                  </label>
+                </div>
+
+                <div className="choice-grid">
+                  <label className="choice choice--plain">
+                    <input
+                      type="checkbox"
+                      checked={settings.emailOnAlarm}
+                      disabled={!settings.emailEnabled}
+                      onChange={(e) => update("emailOnAlarm", e.target.checked)}
+                    />
+                    <span>Notify on alarm</span>
+                  </label>
+                  <label className="choice choice--plain">
+                    <input
+                      type="checkbox"
+                      checked={settings.emailOnPowerFail}
+                      disabled={!settings.emailEnabled}
+                      onChange={(e) => update("emailOnPowerFail", e.target.checked)}
+                    />
+                    <span>Notify on power fail</span>
+                  </label>
+                  <label className="choice choice--plain">
+                    <input
+                      type="checkbox"
+                      checked={settings.emailOnLowBattery}
+                      disabled={!settings.emailEnabled}
+                      onChange={(e) => update("emailOnLowBattery", e.target.checked)}
+                    />
+                    <span>Notify on low battery</span>
+                  </label>
+                </div>
+              </div>
+
+              <div className="settings-actions-row">
+                <button
+                  type="button"
+                  className="btn btn--secondary"
+                  disabled={busy || !settings.emailEnabled}
+                  onClick={async () => {
+                    setBusy(true);
+                    saveSettings(settings);
+                    const r = await testSmtp(settings);
+                    setFlash(`${r.channel}: ${r.message}`);
+                    setBusy(false);
+                  }}
+                >
+                  Test SMTP
+                </button>
+              </div>
+
+              <div className="panel__head panel__head--spaced">
+                <h2>Telegram / webhook</h2>
+              </div>
+              <label className="toggle-row">
+                <span>
+                  <strong>Telegram bot</strong>
+                  <span className="toggle-row__hint">
+                    Commands (/status, /voltage, /load…) + power-fail alerts via HID bridge
+                  </span>
+                </span>
+                <input
+                  type="checkbox"
+                  checked={settings.telegramEnabled}
+                  onChange={(e) => update("telegramEnabled", e.target.checked)}
+                />
+              </label>
+              <div className="form-grid form-grid--2">
+                <label className="field">
+                  <span>Bot token</span>
+                  <input
+                    type="password"
+                    value={settings.telegramBotToken}
+                    disabled={!settings.telegramEnabled}
+                    onChange={(e) => update("telegramBotToken", e.target.value)}
+                  />
+                </label>
+                <label className="field">
+                  <span>Chat ID</span>
+                  <input
+                    value={settings.telegramChatId}
+                    disabled={!settings.telegramEnabled}
+                    onChange={(e) => update("telegramChatId", e.target.value)}
+                  />
+                </label>
+              </div>
+              <MetricRow
+                label="Extended outage alert"
+                hint="Notify if still on battery after this many minutes"
+              >
+                <UnitInput
+                  value={settings.telegramOutageMinutes || 5}
+                  min={1}
+                  max={240}
+                  unit="min"
+                  disabled={!settings.telegramEnabled}
+                  ariaLabel="Extended outage minutes"
+                  onChange={(n) => update("telegramOutageMinutes", n)}
+                />
+              </MetricRow>
+              <div className="choice-grid">
+                <label className="choice choice--plain">
+                  <input
+                    type="checkbox"
+                    checked={settings.telegramNotifyPowerFail !== false}
+                    disabled={!settings.telegramEnabled}
+                    onChange={(e) => update("telegramNotifyPowerFail", e.target.checked)}
+                  />
+                  <span>Alert when electricity goes off</span>
+                </label>
+                <label className="choice choice--plain">
+                  <input
+                    type="checkbox"
+                    checked={settings.telegramNotifyPowerRestore !== false}
+                    disabled={!settings.telegramEnabled}
+                    onChange={(e) => update("telegramNotifyPowerRestore", e.target.checked)}
+                  />
+                  <span>Alert when electricity comes back</span>
+                </label>
+                <label className="choice choice--plain">
+                  <input
+                    type="checkbox"
+                    checked={settings.telegramNotifyExtendedOutage !== false}
+                    disabled={!settings.telegramEnabled}
+                    onChange={(e) => update("telegramNotifyExtendedOutage", e.target.checked)}
+                  />
+                  <span>Alert if outage lasts ≥ threshold</span>
+                </label>
+              </div>
+              <p className="muted tiny">
+                Bot commands: /help /status /voltage /load /battery /freq /runtime /temp
+              </p>
+              <label className="toggle-row">
+                <span>
+                  <strong>Webhook</strong>
+                  <span className="toggle-row__hint">POST JSON on test / alarms</span>
+                </span>
+                <input
+                  type="checkbox"
+                  checked={settings.webhookEnabled}
+                  onChange={(e) => update("webhookEnabled", e.target.checked)}
+                />
+              </label>
+              <label className="field">
+                <span>Webhook URL</span>
+                <input
+                  value={settings.webhookUrl}
+                  disabled={!settings.webhookEnabled}
+                  onChange={(e) => update("webhookUrl", e.target.value)}
+                  placeholder="https://…"
+                />
+              </label>
+              <div className="settings-actions-row">
+                <button
+                  type="button"
+                  className="btn btn--secondary"
+                  disabled={busy || !settings.telegramEnabled}
+                  onClick={async () => {
+                    setBusy(true);
+                    saveSettings(settings);
+                    const r = await testTelegram(settings);
+                    setFlash(`${r.channel}: ${r.message}`);
+                    setBusy(false);
+                  }}
+                >
+                  Test Telegram
+                </button>
+                <button
+                  type="button"
+                  className="btn btn--secondary"
+                  disabled={busy || !settings.webhookEnabled}
+                  onClick={async () => {
+                    setBusy(true);
+                    saveSettings(settings);
+                    const r = await testWebhook(settings);
+                    setFlash(`${r.channel}: ${r.message}`);
+                    setBusy(false);
+                  }}
+                >
+                  Test webhook
+                </button>
+              </div>
+              {flash ? <p className="flash" role="status">{flash}</p> : null}
+            </section>
+          ) : null}
+
+          {section === "shutdown" ? (
+            <>
+              <section className="panel settings-surface">
+                <div className="panel__head">
+                  <h2>
+                    <Shield aria-hidden size={16} strokeWidth={2} /> KPower power control
+                  </h2>
+                </div>
+
+                <label className="toggle-row">
+                  <span>
+                    <strong>KPower power control</strong>
+                    <span className="toggle-row__hint">
+                      Automatic OS shutdown when utility or battery conditions are met
+                    </span>
+                  </span>
+                  <input
+                    type="checkbox"
+                    checked={settings.powerControlEnabled}
+                    onChange={(e) => update("powerControlEnabled", e.target.checked)}
+                  />
+                </label>
+
+                <div
+                  className="settings-block"
+                  data-disabled={!settings.powerControlEnabled || undefined}
+                >
+                  <MetricRow
+                    label="Shutdown after main AC fault"
+                    hint="Delay before initiating system shutdown"
+                  >
+                    <UnitInput
+                      value={settings.shutdownMinutesAfterAcFault}
+                      min={0}
+                      max={2880}
+                      unit="min"
+                      disabled={!settings.powerControlEnabled}
+                      ariaLabel="Minutes after AC fault before shutdown"
+                      onChange={(n) => update("shutdownMinutesAfterAcFault", n)}
+                    />
+                  </MetricRow>
+
+                  <MetricRow
+                    label="Shutdown on low battery"
+                    hint="Delay after low-battery condition"
+                  >
+                    <UnitInput
+                      value={settings.shutdownMinutesOnLowBattery}
+                      min={0}
+                      max={600}
+                      unit="min"
+                      disabled={!settings.powerControlEnabled}
+                      ariaLabel="Minutes after low battery before shutdown"
+                      onChange={(n) => update("shutdownMinutesOnLowBattery", n)}
+                    />
+                  </MetricRow>
+
+                  <MetricRow
+                    label="Shutdown when battery capacity below"
+                    hint="After AC fault, trigger at this remaining capacity"
+                  >
+                    <UnitInput
+                      value={settings.shutdownBatteryPercentAfterAcFault}
+                      min={1}
+                      max={100}
+                      unit="%"
+                      disabled={!settings.powerControlEnabled}
+                      ariaLabel="Battery percent threshold after AC fault"
+                      onChange={(n) => update("shutdownBatteryPercentAfterAcFault", n)}
+                    />
+                  </MetricRow>
+
+                  <div className="settings-divider" />
+
+                  <div className="choice-grid">
+                    <label className="choice choice--plain">
+                      <input
+                        type="checkbox"
+                        checked={settings.shutdownOs}
+                        disabled={!settings.powerControlEnabled}
+                        onChange={(e) => update("shutdownOs", e.target.checked)}
+                      />
+                      <span>Shutdown operating system</span>
+                    </label>
+                    <label className="choice choice--plain">
+                      <input
+                        type="checkbox"
+                        checked={settings.commandFileEnabled}
+                        disabled={!settings.powerControlEnabled}
+                        onChange={(e) => update("commandFileEnabled", e.target.checked)}
+                      />
+                      <span>Run command file before shutdown</span>
+                    </label>
+                  </div>
+
+                  <MetricRow label="Command file" hint="Script executed before OS shutdown">
+                    <div className="browse-row browse-row--compact">
+                      <input
+                        value={settings.commandFilePath}
+                        disabled={!settings.powerControlEnabled || !settings.commandFileEnabled}
+                        onChange={(e) => update("commandFilePath", e.target.value)}
+                        placeholder="C:\\scripts\\pre-shutdown.bat"
+                        aria-label="Command file path"
+                      />
+                      <button
+                        type="button"
+                        className="btn btn--secondary"
+                        disabled={!settings.powerControlEnabled || !settings.commandFileEnabled}
+                        onClick={() => {
+                          const path = window.prompt("Command file path", settings.commandFilePath);
+                          if (path != null) update("commandFilePath", path);
+                        }}
+                      >
+                        Browse
+                      </button>
+                    </div>
+                  </MetricRow>
+
+                  <MetricRow label="Maximum execution time" hint="Abort the script after this limit">
+                    <UnitInput
+                      value={settings.commandMaxExecutionMinutes}
+                      min={1}
+                      max={120}
+                      unit="min"
+                      disabled={!settings.powerControlEnabled || !settings.commandFileEnabled}
+                      ariaLabel="Maximum command file execution time in minutes"
+                      onChange={(n) => update("commandMaxExecutionMinutes", n)}
+                    />
+                  </MetricRow>
+                </div>
+              </section>
+
+              <section className="panel settings-surface">
+                <div className="panel__head">
+                  <h2>UPS power off</h2>
+                </div>
+
+                <label className="toggle-row">
+                  <span>
+                    <strong>UPS power off</strong>
+                    <span className="toggle-row__hint">
+                      Power down the UPS after the operating system has shut down
+                    </span>
+                  </span>
+                  <input
+                    type="checkbox"
+                    checked={settings.upsPowerOffEnabled}
+                    onChange={(e) => update("upsPowerOffEnabled", e.target.checked)}
+                  />
+                </label>
+
+                <div
+                  className="settings-block"
+                  data-disabled={!settings.upsPowerOffEnabled || undefined}
+                >
+                  <MetricRow
+                    label="Delay before UPS turns off"
+                    hint="Time allowed for OS shutdown to complete"
+                  >
+                    <UnitInput
+                      value={settings.upsPowerOffDelayMinutes}
+                      min={1}
+                      max={9}
+                      unit="min"
+                      disabled={!settings.upsPowerOffEnabled}
+                      ariaLabel="Minutes before UPS turns off"
+                      onChange={(n) => update("upsPowerOffDelayMinutes", n)}
+                    />
+                  </MetricRow>
+                </div>
+              </section>
+            </>
+          ) : null}
+
+          {section === "general" ? (
+            <section className="panel settings-surface">
+              <div className="panel__head">
+                <h2>
+                  <Cable aria-hidden size={16} strokeWidth={2} /> Connectivity & workstation
+                </h2>
+              </div>
+
+              <div className="settings-block">
+                <MetricRow label="Poll interval" hint="How often telemetry is refreshed">
+                  <UnitInput
+                    value={settings.pollIntervalMs}
+                    min={500}
+                    max={10000}
+                    unit="ms"
+                    ariaLabel="Poll interval in milliseconds"
+                    onChange={(n) => update("pollIntervalMs", n)}
+                  />
+                </MetricRow>
+
+                <div className="form-grid form-grid--2">
+                  <label className="field">
+                    <span>Language</span>
+                    <select
+                      value={settings.language}
+                      onChange={(e) => update("language", e.target.value as AppSettings["language"])}
+                    >
+                      <option value="en">English</option>
+                      <option value="ar">Arabic</option>
+                    </select>
+                  </label>
+                  <label className="field">
+                    <span>Communication type</span>
+                    <select
+                      value={settings.commsType}
+                      onChange={(e) =>
+                        update("commsType", e.target.value as AppSettings["commsType"])
+                      }
+                    >
+                      <option value="usb">USB HID device</option>
+                      <option value="serial">Serial port</option>
+                    </select>
+                  </label>
+                </div>
+
+                <div className="choice-grid">
+                  <label className="choice choice--plain">
+                    <input
+                      type="checkbox"
+                      checked={settings.startWithWindows}
+                      onChange={(e) => update("startWithWindows", e.target.checked)}
+                    />
+                    <span>Start with Windows</span>
+                  </label>
+                  <label className="choice choice--plain">
+                    <input
+                      type="checkbox"
+                      checked={settings.minimizeToTray}
+                      onChange={(e) => update("minimizeToTray", e.target.checked)}
+                    />
+                    <span>Minimize to system tray</span>
+                  </label>
+                  <label className="choice choice--plain">
+                    <input
+                      type="checkbox"
+                      checked={settings.simulateAlarms}
+                      onChange={(e) => update("simulateAlarms", e.target.checked)}
+                    />
+                    <span>Allow manual test-alarm injection (Alarms page)</span>
+                  </label>
+                </div>
+
+                <p className="settings-lead">
+                  Live telemetry comes from the MGE USB UPS (VID 0463 / PID 0001) through the HID
+                  bridge (`npm run hid` or `npm run dev:live`). There is no telemetry simulator.
+                </p>
+              </div>
+            </section>
+          ) : null}
+        </div>
+
+        <div className="settings-sticky-bar">
+          <div className="settings-sticky-bar__copy">
+            <strong>Apply configuration</strong>
+            <p>Persisted locally until native settings storage ships.</p>
+          </div>
+          <div className="row-actions">
+            {saved ? <p className="flash">Settings saved.</p> : null}
+            <button type="button" className="btn btn--secondary" onClick={onReset}>
+              Reset defaults
+            </button>
+            <button type="submit" className="btn btn--primary">
+              <Save aria-hidden size={15} strokeWidth={2} /> Save settings
+            </button>
+          </div>
+        </div>
+      </form>
+    </section>
+  );
+}

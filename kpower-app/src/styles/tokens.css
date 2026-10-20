@@ -1,0 +1,18 @@
+:root {
+  --bg: #eef1f5;
+  --surface: #ffffff;
+  --surface-elevated: #fbfdff;
+  --text: #0f1724;
+  --muted: #5a6a7c;
+  --accent: #1d4ed8;
+  --accent-soft: #e8eefc;
+  --ok: #0f7a45;
+  --warn: #a16207;
+  --danger: #b91c1c;
+  --border: #d3dae4;
+  --border-strong: #b8c2d0;
+  --font: "IBM Plex Sans", "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+  --shadow-soft: 0 1px 0 rgba(15, 23, 36, 0.04);
+  --radius: 10px;
+}

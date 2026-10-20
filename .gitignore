@@ -1,0 +1,18 @@
+# Root / tooling noise (app lockfile lives under kpower-app/)
+/node_modules/
+/package-lock.json
+.DS_Store
+*.log
+.env
+.env.*
+.sonar-secrets-cli-workdir/
+
+# OS
+Thumbs.db
+Desktop.ini
+
+# Local agent / vendor binaries (never publish)
+.superpowers/
+KPower_*.exe
+*.exe
+!kpower-app/**/*.exe

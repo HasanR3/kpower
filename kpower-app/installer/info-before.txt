@@ -1,0 +1,13 @@
+KPower Monitor Setup
+
+This installer includes:
+  - Monitoring UI
+  - USB HID bridge
+  - Bundled Node.js runtime (no separate Node install)
+
+If Windows Smart App Control blocks this Setup.exe, either:
+  1. Settings > Privacy & security > Windows Security > App & browser control
+     > Smart App Control > Off  (then run Setup again), or
+  2. Code-sign KPower-Setup with a trusted Authenticode certificate.
+
+Telegram tokens are never shipped in this installer.
