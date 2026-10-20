@@ -1,14 +1,12 @@
 import { useEffect, useState } from "react";
 import { AppNav, type AppRoute } from "./components/AppNav";
 import { StatusBar } from "./components/StatusBar";
+import { AlarmsPage } from "./pages/AlarmsPage";
+import { ControlPage } from "./pages/ControlPage";
 import { DevicePage } from "./pages/DevicePage";
-import {
-  AlarmsPage,
-  ControlPage,
-  HistoryPage,
-  SchedulePage,
-  SettingsPage,
-} from "./pages/StubPages";
+import { HistoryPage } from "./pages/HistoryPage";
+import { SchedulePage } from "./pages/SchedulePage";
+import { SettingsPage } from "./pages/SettingsPage";
 import { subscribeUps } from "./lib/upsStore";
 import type { UpsSnapshot } from "./lib/types";
 import "./styles/app.css";
@@ -18,11 +16,11 @@ function renderPage(route: AppRoute, snapshot: UpsSnapshot | null) {
     case "device":
       return <DevicePage snapshot={snapshot} />;
     case "alarms":
-      return <AlarmsPage />;
+      return <AlarmsPage snapshot={snapshot} />;
     case "schedule":
       return <SchedulePage />;
     case "control":
-      return <ControlPage />;
+      return <ControlPage snapshot={snapshot} />;
     case "history":
       return <HistoryPage />;
     case "settings":

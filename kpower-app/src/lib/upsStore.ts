@@ -1,3 +1,10 @@
+import {
+  appendHistorySample,
+  loadHistory,
+  loadSettings,
+  saveHistory,
+  type AppSettings,
+} from "./appData";
 import type { UpsMode, UpsSnapshot } from "./types";
 import { UPS_SNAPSHOT_EVENT } from "./types";
 
@@ -52,10 +59,21 @@ let started = false;
 let unlisten: (() => void) | null = null;
 let simTimer: ReturnType<typeof setInterval> | null = null;
 let simConnected = true;
+let simMode: UpsMode = "line";
 let simTick = 0;
+let pollIntervalMs = loadSettings().pollIntervalMs || 1000;
+let historyWriteCounter = 0;
 
 function emit(next: UpsSnapshot | null) {
   latest = next;
+  if (next) {
+    historyWriteCounter += 1;
+    // Persist ~every 5th sample to avoid thrashing localStorage
+    if (historyWriteCounter % 5 === 0) {
+      const hist = appendHistorySample(loadHistory(), next);
+      saveHistory(hist);
+    }
+  }
   listeners.forEach((cb) => cb(latest));
 }
 
@@ -67,17 +85,18 @@ function applyRaw(raw: unknown) {
 function sampleSimulator(): UpsSnapshot {
   simTick += 1;
   const wobble = Math.sin(simTick / 8) * 3;
+  const onBattery = simConnected && simMode === "battery";
   return {
     connected: simConnected,
-    mode: simConnected ? "line" : "unknown",
+    mode: simConnected ? simMode : "unknown",
     loadPercent: simConnected ? 35 + wobble : 0,
-    batteryPercent: simConnected ? 96 : 0,
-    runtimeSeconds: simConnected ? 5400 : 0,
-    inputVoltage: simConnected ? 230 + wobble : 0,
+    batteryPercent: simConnected ? (onBattery ? Math.max(20, 80 - simTick * 0.05) : 96) : 0,
+    runtimeSeconds: simConnected ? (onBattery ? 1800 : 5400) : 0,
+    inputVoltage: simConnected ? (onBattery ? 0 : 230 + wobble) : 0,
     outputVoltage: simConnected ? 229 + wobble * 0.5 : 0,
     frequency: simConnected ? 50 : 0,
     temperatureC: simConnected ? 28 + wobble * 0.1 : 0,
-    alarmCodes: [],
+    alarmCodes: onBattery ? ["ON_BATTERY"] : [],
     timestampMs: Date.now(),
   };
 }
@@ -97,15 +116,32 @@ async function bindTauriEvents() {
   }
 }
 
-function startSimulator() {
-  if (simTimer) return;
+function restartSimulatorTimer() {
+  if (simTimer) {
+    clearInterval(simTimer);
+    simTimer = null;
+  }
   emit(sampleSimulator());
-  simTimer = setInterval(() => emit(sampleSimulator()), 1000);
+  simTimer = setInterval(() => emit(sampleSimulator()), pollIntervalMs);
 }
 
-/** Test helper / manual: force simulator disconnect state. */
+function startSimulator() {
+  if (simTimer) return;
+  restartSimulatorTimer();
+}
+
+export function applySettingsRuntime(settings: AppSettings) {
+  pollIntervalMs = Math.max(500, settings.pollIntervalMs || 1000);
+  if (simTimer) restartSimulatorTimer();
+}
+
 export function simulatorSetConnected(connected: boolean) {
   simConnected = connected;
+  emit(sampleSimulator());
+}
+
+export function simulatorSetMode(mode: UpsMode) {
+  simMode = mode;
   emit(sampleSimulator());
 }
 
@@ -118,6 +154,8 @@ export function subscribeUps(cb: UpsListener): () => void {
   cb(latest);
   if (!started) {
     started = true;
+    const settings = loadSettings();
+    pollIntervalMs = Math.max(500, settings.pollIntervalMs || 1000);
     void bindTauriEvents().then((ok) => {
       if (!ok) startSimulator();
     });
@@ -136,7 +174,10 @@ export function __resetUpsStoreForTests() {
   if (simTimer) clearInterval(simTimer);
   simTimer = null;
   simConnected = true;
+  simMode = "line";
   simTick = 0;
+  historyWriteCounter = 0;
+  pollIntervalMs = 1000;
 }
 
 export { UPS_SNAPSHOT_EVENT };
