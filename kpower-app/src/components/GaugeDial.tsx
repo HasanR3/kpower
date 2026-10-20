@@ -1,3 +1,36 @@
+/**
+ * Semi-circular gauge (open bottom).
+ * 0% = left, 50% = top, 100% = right.
+ * SVG angles: 0° right, 90° down, 180° left, 270° up — clockwise.
+ */
+const CX = 100;
+const CY = 108;
+const R = 72;
+const TRACK = 12;
+const START_DEG = 180; // left
+const SWEEP_DEG = 180; // through top to right
+
+function degToRad(deg: number): number {
+  return (deg * Math.PI) / 180;
+}
+
+/** Point on the arc at value ratio 0..1 */
+function pointOnArc(ratio: number, radius = R): { x: number; y: number } {
+  const deg = START_DEG + SWEEP_DEG * Math.max(0, Math.min(1, ratio));
+  const rad = degToRad(deg);
+  return {
+    x: CX + Math.cos(rad) * radius,
+    y: CY + Math.sin(rad) * radius,
+  };
+}
+
+function arcPath(radius: number): string {
+  const start = pointOnArc(0, radius);
+  const end = pointOnArc(1, radius);
+  // sweep=1 (clockwise) from left → through top → right
+  return `M ${start.x.toFixed(2)} ${start.y.toFixed(2)} A ${radius} ${radius} 0 0 1 ${end.x.toFixed(2)} ${end.y.toFixed(2)}`;
+}
+
 export function GaugeDial({
   label,
   value,
@@ -9,36 +42,62 @@ export function GaugeDial({
   max?: number;
   unit?: string;
 }) {
-  const clamped = Math.max(0, Math.min(max, value));
-  const ratio = clamped / max;
-  const angle = -120 + ratio * 240;
-  const rad = (angle * Math.PI) / 180;
-  const cx = 100;
-  const cy = 100;
-  const r = 72;
-  const nx = cx + Math.cos(rad) * (r - 8);
-  const ny = cy + Math.sin(rad) * (r - 8);
+  const clamped = Math.max(0, Math.min(max, Number.isFinite(value) ? value : 0));
+  const ratio = max > 0 ? clamped / max : 0;
+  const tip = pointOnArc(ratio, R - 10);
+
+  const tone =
+    ratio >= 0.9 ? "gauge--high" : ratio >= 0.6 ? "gauge--mid" : ratio > 0 ? "gauge--low" : "gauge--empty";
 
   return (
-    <div className="gauge">
-      <svg viewBox="0 0 200 160" className="gauge__svg" aria-hidden>
+    <div className={`gauge ${tone}`}>
+      <svg viewBox="0 0 200 155" className="gauge__svg" role="img" aria-label={`${label}: ${clamped.toFixed(1)}${unit}`}>
         <path
-          d="M 28 120 A 72 72 0 1 1 172 120"
+          d={arcPath(R)}
           fill="none"
-          stroke="#e2e8f0"
-          strokeWidth="14"
+          stroke="currentColor"
+          className="gauge__track"
+          strokeWidth={TRACK}
           strokeLinecap="round"
+          pathLength={100}
         />
         <path
-          d="M 28 120 A 72 72 0 1 1 172 120"
+          d={arcPath(R)}
           fill="none"
-          stroke="#1d4ed8"
-          strokeWidth="14"
+          stroke="currentColor"
+          className="gauge__fill"
+          strokeWidth={TRACK}
           strokeLinecap="round"
-          strokeDasharray={`${ratio * 226} 226`}
+          pathLength={100}
+          strokeDasharray={`${ratio * 100} 100`}
         />
-        <line x1={cx} y1={cy} x2={nx} y2={ny} stroke="#0f1724" strokeWidth="3" strokeLinecap="round" />
-        <circle cx={cx} cy={cy} r="6" fill="#0f1724" />
+        {[0, 0.5, 1].map((t) => {
+          const outer = pointOnArc(t, R + 2);
+          const inner = pointOnArc(t, R - TRACK / 2 - 4);
+          return (
+            <line
+              key={t}
+              x1={inner.x}
+              y1={inner.y}
+              x2={outer.x}
+              y2={outer.y}
+              className="gauge__tick"
+              strokeWidth="2"
+              strokeLinecap="round"
+            />
+          );
+        })}
+        <line
+          x1={CX}
+          y1={CY}
+          x2={tip.x}
+          y2={tip.y}
+          className="gauge__needle"
+          strokeWidth="3"
+          strokeLinecap="round"
+        />
+        <circle cx={CX} cy={CY} r="7" className="gauge__hub" />
+        <circle cx={CX} cy={CY} r="3" className="gauge__hub-core" />
       </svg>
       <div className="gauge__value">
         {clamped.toFixed(2)}

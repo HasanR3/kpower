@@ -1372,26 +1372,74 @@ body {
 .dial-row {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 1rem;
-  padding: 1.25rem;
+  gap: 1.5rem;
+  padding: 1.5rem 1.25rem 1.25rem;
   justify-items: center;
+  align-items: end;
 }
 
 .gauge {
   text-align: center;
-  width: min(100%, 280px);
+  width: min(100%, 300px);
+  color: var(--accent);
 }
 
 .gauge__svg {
   width: 100%;
   height: auto;
+  display: block;
+  overflow: visible;
+}
+
+.gauge__track {
+  color: #e2e8f0;
+}
+
+.gauge__fill {
+  color: var(--accent);
+  transition: stroke-dasharray 0.45s ease;
+}
+
+.gauge--high .gauge__fill {
+  color: var(--ok);
+}
+
+.gauge--mid .gauge__fill {
+  color: var(--accent);
+}
+
+.gauge--low .gauge__fill {
+  color: #3b82f6;
+}
+
+.gauge--empty .gauge__fill {
+  color: transparent;
+}
+
+.gauge__tick {
+  stroke: #94a3b8;
+}
+
+.gauge__needle {
+  stroke: #0f1724;
+  transition: x2 0.35s ease, y2 0.35s ease;
+}
+
+.gauge__hub {
+  fill: #0f1724;
+}
+
+.gauge__hub-core {
+  fill: #f8fafc;
 }
 
 .gauge__value {
   font-family: var(--font-mono);
   font-size: 1.45rem;
   font-weight: 600;
-  margin-top: -0.5rem;
+  margin-top: -0.35rem;
+  letter-spacing: -0.02em;
+  color: var(--text);
 }
 
 .gauge__value span {
@@ -1399,10 +1447,11 @@ body {
   font-size: 0.85rem;
   color: var(--muted);
   font-family: var(--font);
+  font-weight: 500;
 }
 
 .gauge__label {
-  margin-top: 0.25rem;
+  margin-top: 0.2rem;
   font-size: 0.9rem;
   font-weight: 600;
   color: var(--text);
