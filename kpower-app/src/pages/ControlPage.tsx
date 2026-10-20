@@ -1,5 +1,12 @@
 import { useState } from "react";
-import { CheckCircle2, Send, Zap } from "lucide-react";
+import {
+  AlertTriangle,
+  CheckCircle2,
+  Clock3,
+  Radio,
+  Send,
+  Zap,
+} from "lucide-react";
 import { PageHero } from "../components/PageHero";
 import {
   controlCommandLabel,
@@ -14,24 +21,70 @@ import type { UpsSnapshot } from "../lib/types";
 
 type ControlOption = {
   id: ControlCommand;
-  needsMinutes?: { min: number; max: number; defaultValue: number; unitLabel: string };
+  hint: string;
+  needsMinutes?: { min: number; max: number; unit: string };
 };
 
-const OPTIONS: ControlOption[] = [
-  { id: "selfTest10s" },
-  { id: "selfTestEod" },
+type ControlGroup = {
+  id: string;
+  title: string;
+  options: ControlOption[];
+};
+
+const GROUPS: ControlGroup[] = [
   {
-    id: "selfTestMinutes",
-    needsMinutes: { min: 1, max: 99, defaultValue: 10, unitLabel: "minute(s)" },
+    id: "self-test",
+    title: "Self-test",
+    options: [
+      {
+        id: "selfTest10s",
+        hint: "Quick battery and inverter check",
+      },
+      {
+        id: "selfTestEod",
+        hint: "Runs until discharge threshold — use with care",
+      },
+      {
+        id: "selfTestMinutes",
+        hint: "Timed self-test for a set duration",
+        needsMinutes: { min: 1, max: 99, unit: "min" },
+      },
+      {
+        id: "selfTestCancel",
+        hint: "Stop an in-progress self-test",
+      },
+    ],
   },
-  { id: "selfTestCancel" },
   {
-    id: "closeOutputMinutes",
-    needsMinutes: { min: 0, max: 9, defaultValue: 1, unitLabel: "minute(s)" },
+    id: "output",
+    title: "Protected output",
+    options: [
+      {
+        id: "closeOutputMinutes",
+        hint: "Delay, then cut UPS output to the load",
+        needsMinutes: { min: 0, max: 9, unit: "min" },
+      },
+      {
+        id: "closeOutputCancel",
+        hint: "Cancel a pending output close",
+      },
+    ],
   },
-  { id: "closeOutputCancel" },
-  { id: "buzzerToggle" },
+  {
+    id: "alerts",
+    title: "Alerts",
+    options: [
+      {
+        id: "buzzerToggle",
+        hint: "Mute or unmute the UPS buzzer",
+      },
+    ],
+  },
 ];
+
+function clamp(n: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, n));
+}
 
 export function ControlPage({ snapshot }: { snapshot: UpsSnapshot | null }) {
   const [selected, setSelected] = useState<ControlCommand>("selfTest10s");
@@ -42,6 +95,10 @@ export function ControlPage({ snapshot }: { snapshot: UpsSnapshot | null }) {
   const [flash, setFlash] = useState<string | null>(null);
 
   const connected = Boolean(snapshot?.connected);
+  const succeeded = results.filter((r) => r.ok).length;
+  const failed = results.filter((r) => !r.ok).length;
+  const selectedMeta = GROUPS.flatMap((g) => g.options).find((o) => o.id === selected);
+
   const persist = (next: CommandResult[]) => {
     setResults(next);
     saveCommandResults(next);
@@ -60,14 +117,12 @@ export function ControlPage({ snapshot }: { snapshot: UpsSnapshot | null }) {
     setConfirmOpen(false);
   };
 
-  const onSure = () => {
+  const onSend = () => {
     if (selected === "selfTestMinutes") {
-      const n = Math.min(99, Math.max(1, selfTestMinutes));
-      setSelfTestMinutes(n);
+      setSelfTestMinutes((n) => clamp(n, 1, 99));
     }
     if (selected === "closeOutputMinutes") {
-      const n = Math.min(9, Math.max(0, closeOutputMinutes));
-      setCloseOutputMinutes(n);
+      setCloseOutputMinutes((n) => clamp(n, 0, 9));
     }
     if (isDestructive(selected)) {
       setConfirmOpen(true);
@@ -82,30 +137,28 @@ export function ControlPage({ snapshot }: { snapshot: UpsSnapshot | null }) {
         Icon={Zap}
         kicker="Operations"
         title="UPS Control"
-        subtitle="Self-test, output close, and buzzer commands matching stock KPower"
+        subtitle="Issue self-test, output, and buzzer commands with confirmation on destructive actions"
       />
 
-      <div className="stat-strip stat-strip--four">
-        <article className="stat-chip">
-          <span className="stat-chip__label">Link</span>
+      <div className="ops-bar" role="status">
+        <div className="ops-bar__item">
+          <span className="ops-bar__label">Link</span>
           <strong className={connected ? "is-ok-text" : "text-danger"}>
             {connected ? "Connected" : "Disconnected"}
           </strong>
-        </article>
-        <article className="stat-chip">
-          <span className="stat-chip__label">Selected</span>
-          <strong className="stat-chip__text">{controlCommandLabel(selected)}</strong>
-        </article>
-        <article className="stat-chip">
-          <span className="stat-chip__label">Succeeded</span>
-          <strong>{results.filter((r) => r.ok).length}</strong>
-        </article>
-        <article className="stat-chip">
-          <span className="stat-chip__label">Failed</span>
-          <strong className={results.some((r) => !r.ok) ? "text-danger" : ""}>
-            {results.filter((r) => !r.ok).length}
-          </strong>
-        </article>
+        </div>
+        <div className="ops-bar__item ops-bar__item--grow">
+          <span className="ops-bar__label">Selected</span>
+          <strong className="ops-bar__selected">{controlCommandLabel(selected)}</strong>
+        </div>
+        <div className="ops-bar__item">
+          <span className="ops-bar__label">Succeeded</span>
+          <strong>{succeeded}</strong>
+        </div>
+        <div className="ops-bar__item">
+          <span className="ops-bar__label">Failed</span>
+          <strong className={failed > 0 ? "text-danger" : undefined}>{failed}</strong>
+        </div>
       </div>
 
       {!connected ? (
@@ -114,79 +167,129 @@ export function ControlPage({ snapshot }: { snapshot: UpsSnapshot | null }) {
         </p>
       ) : null}
 
-      <div className="enterprise-grid">
-        <section className="panel">
+      <div className="control-layout">
+        <section className="panel control-panel">
           <div className="panel__head">
-            <h2>UPS Control</h2>
+            <h2>
+              <Radio aria-hidden size={16} strokeWidth={2} /> Command
+            </h2>
+            <span className="panel__tag">Stock protocol parity</span>
           </div>
-          <div className="control-options">
-            {OPTIONS.map((opt) => (
-              <label
-                key={opt.id}
-                className={selected === opt.id ? "control-option control-option--active" : "control-option"}
-              >
-                <input
-                  type="radio"
-                  name="ups-control"
-                  checked={selected === opt.id}
-                  onChange={() => setSelected(opt.id)}
-                />
-                <span className="control-option__body">
-                  <strong>{controlCommandLabel(opt.id)}</strong>
-                  {opt.needsMinutes ? (
-                    <span className="control-option__param">
-                      Duration ({opt.needsMinutes.min} to {opt.needsMinutes.max}){" "}
-                      <input
-                        type="number"
-                        min={opt.needsMinutes.min}
-                        max={opt.needsMinutes.max}
-                        value={
-                          opt.id === "selfTestMinutes" ? selfTestMinutes : closeOutputMinutes
-                        }
-                        onChange={(e) => {
-                          const n = Number(e.target.value);
-                          if (opt.id === "selfTestMinutes") setSelfTestMinutes(n);
-                          else setCloseOutputMinutes(n);
-                        }}
-                        onClick={(e) => e.stopPropagation()}
-                        aria-label={
-                          opt.id === "selfTestMinutes"
-                            ? "Self-test duration in minutes"
-                            : "Close output delay in minutes"
-                        }
-                      />{" "}
-                      {opt.needsMinutes.unitLabel}
-                    </span>
-                  ) : null}
-                </span>
-              </label>
+
+          <div className="cmd-groups">
+            {GROUPS.map((group) => (
+              <fieldset key={group.id} className="cmd-group">
+                <legend className="cmd-group__title">{group.title}</legend>
+                <div className="cmd-list" role="radiogroup" aria-label={group.title}>
+                  {group.options.map((opt) => {
+                    const active = selected === opt.id;
+                    const minutesValue =
+                      opt.id === "selfTestMinutes" ? selfTestMinutes : closeOutputMinutes;
+                    const setMinutes =
+                      opt.id === "selfTestMinutes" ? setSelfTestMinutes : setCloseOutputMinutes;
+
+                    return (
+                      <label
+                        key={opt.id}
+                        className={active ? "cmd-row cmd-row--active" : "cmd-row"}
+                      >
+                        <input
+                          type="radio"
+                          name="ups-control"
+                          value={opt.id}
+                          checked={active}
+                          onChange={() => setSelected(opt.id)}
+                          aria-label={controlCommandLabel(opt.id)}
+                        />
+                        <span className="cmd-row__main">
+                          <strong>{controlCommandLabel(opt.id)}</strong>
+                          <span className="cmd-row__hint">{opt.hint}</span>
+                        </span>
+                        {opt.needsMinutes ? (
+                          <span
+                            className={
+                              active
+                                ? "cmd-param"
+                                : "cmd-param cmd-param--dim"
+                            }
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <input
+                              type="number"
+                              className="input-compact"
+                              min={opt.needsMinutes.min}
+                              max={opt.needsMinutes.max}
+                              value={minutesValue}
+                              disabled={!active}
+                              onChange={(e) => setMinutes(Number(e.target.value))}
+                              onFocus={() => setSelected(opt.id)}
+                              aria-label={
+                                opt.id === "selfTestMinutes"
+                                  ? "Self-test duration in minutes"
+                                  : "Close output delay in minutes"
+                              }
+                            />
+                            <span className="cmd-param__unit">{opt.needsMinutes.unit}</span>
+                            <span className="cmd-param__range">
+                              {opt.needsMinutes.min}–{opt.needsMinutes.max}
+                            </span>
+                          </span>
+                        ) : null}
+                      </label>
+                    );
+                  })}
+                </div>
+              </fieldset>
             ))}
           </div>
-          <div className="row-actions" style={{ marginTop: "1.1rem", justifyContent: "center" }}>
-            <button type="button" className="btn btn--primary btn--wide" onClick={onSure}>
+
+          <div className="control-footer">
+            <div className="control-footer__meta">
+              {isDestructive(selected) ? (
+                <span className="control-footer__warn">
+                  <AlertTriangle aria-hidden size={14} strokeWidth={2} />
+                  Confirmation required
+                </span>
+              ) : (
+                <span className="muted tiny">
+                  {selectedMeta?.hint ?? "Select a command to send"}
+                </span>
+              )}
+              {flash ? <p className="flash">{flash}</p> : null}
+            </div>
+            <button type="button" className="btn btn--primary" onClick={onSend}>
               <Send aria-hidden size={15} strokeWidth={2} />
-              Sure
+              Send command
             </button>
-            {flash ? <p className="flash">{flash}</p> : null}
           </div>
         </section>
 
-        <section className="panel">
+        <section className="panel control-results">
           <div className="panel__head">
             <h2>
               <CheckCircle2 aria-hidden size={16} strokeWidth={2} /> Recent results
             </h2>
+            {results.length > 0 ? (
+              <span className="panel__tag">{Math.min(results.length, 12)} shown</span>
+            ) : null}
           </div>
+
           {results.length === 0 ? (
-            <p className="panel__empty">No commands sent yet.</p>
+            <div className="empty-state">
+              <Clock3 aria-hidden size={28} strokeWidth={1.6} />
+              <strong>No commands sent yet</strong>
+              <p>Results appear here after you send a UPS control command.</p>
+            </div>
           ) : (
-            <ul className="data-list">
+            <ul className="result-list">
               {results.slice(0, 12).map((r) => (
-                <li key={r.id} className="data-row">
-                  <div>
+                <li key={r.id} className="result-row">
+                  <div className="result-row__body">
                     <strong>{controlCommandLabel(r.command)}</strong>
-                    <div className={r.ok ? "muted" : "text-danger"}>{r.message}</div>
-                    <div className="muted tiny">{new Date(r.at).toLocaleString()}</div>
+                    <p className={r.ok ? "muted" : "text-danger"}>{r.message}</p>
+                    <time className="muted tiny" dateTime={new Date(r.at).toISOString()}>
+                      {new Date(r.at).toLocaleString()}
+                    </time>
                   </div>
                   <span className={r.ok ? "chip chip--ok" : "chip chip--danger"}>
                     {r.ok ? "Succeeded" : "Failed"}

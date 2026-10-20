@@ -23,7 +23,7 @@ describe("ControlPage", () => {
     const user = userEvent.setup();
     render(<ControlPage snapshot={connected} />);
     await user.click(screen.getByLabelText(/Close UPS output after delay/i));
-    await user.click(screen.getByRole("button", { name: /Sure/i }));
+    await user.click(screen.getByRole("button", { name: /Send command/i }));
     expect(screen.getByRole("dialog")).toBeInTheDocument();
     expect(screen.getByText(/Confirm Close UPS output after delay/i)).toBeInTheDocument();
   });
