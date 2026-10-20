@@ -323,7 +323,7 @@ export function PowerTopology({ snapshot }: { snapshot: UpsSnapshot | null }) {
               <rect x="25" y="9" width="7" height="12" rx="1" className="topo-cell" />
             </g>
             <text x={upsCx} y={bat.y + bat.h - 28} textAnchor="middle" className="topo-label">
-              Battery bank
+              Batteries
             </text>
             <text x={upsCx} y={bat.y + bat.h - 10} textAnchor="middle" className="topo-value topo-value--sm">
               {flow.connected
