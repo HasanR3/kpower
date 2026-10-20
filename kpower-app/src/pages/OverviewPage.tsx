@@ -23,6 +23,7 @@ import {
   YAxis,
 } from "recharts";
 import type { AppRoute } from "../components/AppNav";
+import { PowerTopology } from "../components/PowerTopology";
 import {
   loadAlarms,
   loadCommandResults,
@@ -176,6 +177,8 @@ export function OverviewPage({
           </div>
         </article>
       </div>
+
+      <PowerTopology snapshot={snapshot} />
 
       <div className="overview-grid">
         <section className="panel panel--chart">

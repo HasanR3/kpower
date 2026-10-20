@@ -1250,6 +1250,220 @@ body {
   padding-top: 0.25rem;
 }
 
+/* —— Power topology diagram —— */
+.topology {
+  margin-bottom: 1rem;
+}
+
+.topology-stage {
+  background:
+    radial-gradient(ellipse at 50% 30%, #f4f8ff 0%, transparent 55%),
+    linear-gradient(180deg, #fbfcfe 0%, #f3f6fa 100%);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.topology-svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: 380px;
+}
+
+.topo-rail {
+  fill: none;
+  stroke: url(#topoRail);
+  stroke-width: 6;
+  stroke-linecap: round;
+  opacity: 0.55;
+}
+
+.topo-rail--live {
+  stroke: url(#topoLive);
+  opacity: 1;
+}
+
+.topo-rail--warn {
+  stroke: url(#topoWarn);
+  opacity: 1;
+}
+
+.topo-rail--vert {
+  stroke-width: 5;
+}
+
+.topo-flow {
+  fill: #94a3b8;
+  opacity: 0;
+}
+
+.topo-flow--on {
+  fill: #1d4ed8;
+  opacity: 1;
+  animation: topoPulse 1.4s ease-in-out infinite;
+}
+
+.topo-flow--warn {
+  fill: #a16207;
+}
+
+.topo-node rect {
+  fill: #ffffff;
+  stroke: #d3dae4;
+  stroke-width: 1.5;
+}
+
+.topo-node {
+  color: #64748b;
+}
+
+.topo-node--live {
+  color: #1d4ed8;
+}
+
+.topo-node--live > rect {
+  stroke: #93c5fd;
+  fill: #f8fbff;
+}
+
+.topo-node--core > rect {
+  stroke: #cbd5e1;
+}
+
+.topo-node--core.topo-node--live > rect {
+  stroke: #60a5fa;
+  fill: #eff6ff;
+}
+
+.topo-node--fault > rect {
+  stroke: #fca5a5;
+  fill: #fff1f2;
+}
+
+.topo-node--warn {
+  color: #a16207;
+}
+
+.topo-node--warn > rect {
+  stroke: #fcd34d;
+  fill: #fffbeb;
+}
+
+.topo-screen {
+  fill: #0f1724 !important;
+  stroke: none !important;
+}
+
+.topo-screen-text {
+  fill: #93c5fd;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+}
+
+.topo-badge {
+  fill: #1d4ed8;
+  stroke: none;
+}
+
+.topo-label {
+  fill: #0f1724;
+  font-family: var(--font);
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.topo-value {
+  fill: #5a6a7c;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.topo-value--sm {
+  font-size: 11px;
+}
+
+.topo-cell {
+  fill: #cbd5e1;
+  stroke: none;
+}
+
+.topo-node--live .topo-cell,
+.topo-node--warn .topo-cell {
+  fill: currentColor;
+  opacity: 0.55;
+}
+
+.topology-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.85rem 1.25rem;
+  align-items: center;
+  margin-top: 0.85rem;
+}
+
+.topology-legend__item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.topo-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #94a3b8;
+  display: inline-block;
+}
+
+.topo-dot--live {
+  background: #1d4ed8;
+}
+
+.topo-dot--warn {
+  background: #a16207;
+}
+
+.topology-status {
+  margin: 0 0 0 auto;
+  font-size: 0.85rem;
+  color: var(--text);
+  font-weight: 500;
+}
+
+.device-panels--chart-only {
+  grid-template-columns: 1fr;
+}
+
+@keyframes topoPulse {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .topo-flow--on {
+    animation: none;
+    opacity: 1;
+  }
+}
+
+@media (max-width: 720px) {
+  .topology-status {
+    margin-left: 0;
+    flex-basis: 100%;
+  }
+}
+
 @media (max-width: 1100px) {
   .kpi-rail {
     grid-template-columns: repeat(3, 1fr);

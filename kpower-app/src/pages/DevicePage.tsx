@@ -8,7 +8,7 @@ import {
   Zap,
 } from "lucide-react";
 import { MetricTile } from "../components/MetricTile";
-import { PowerFlowMimic } from "../components/PowerFlowMimic";
+import { PowerTopology } from "../components/PowerTopology";
 import { VoltageChart, type VoltagePoint } from "../components/VoltageChart";
 import { formatRuntime } from "../lib/healthScore";
 import type { UpsSnapshot } from "../lib/types";
@@ -114,8 +114,9 @@ export function DevicePage({ snapshot }: { snapshot: UpsSnapshot | null }) {
         />
       </div>
 
-      <div className="device-panels">
-        <PowerFlowMimic mode={snapshot.mode} connected={snapshot.connected} />
+      <PowerTopology snapshot={snapshot} />
+
+      <div className="device-panels device-panels--chart-only">
         <VoltageChart points={points} />
       </div>
     </section>
