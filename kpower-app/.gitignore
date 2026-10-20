@@ -12,6 +12,15 @@ dist
 dist-ssr
 *.local
 
+# Secrets / local runtime (never commit)
+.env
+.env.*
+telegram.json
+**/telegram.json
+test-results/
+playwright-report/
+blob-report/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

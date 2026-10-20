@@ -5,24 +5,33 @@
   "type": "module",
   "scripts": {
     "hid": "node scripts/ups-hid-bridge.mjs",
+    "hid:control": "node scripts/run-hid-with-control.mjs",
     "dev": "vite",
     "dev:live": "node scripts/dev-live.mjs",
     "build": "tsc && vite build",
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
-    "tauri": "tauri"
+    "test:e2e": "playwright test",
+    "service:install": "powershell -ExecutionPolicy Bypass -File ./scripts/install-hid-service.ps1",
+    "service:uninstall": "powershell -ExecutionPolicy Bypass -File ./scripts/uninstall-hid-service.ps1",
+    "history:inspect": "python scripts/inspect-kpower-db.py",
+    "tauri": "tauri",
+    "tauri:build": "tauri build"
   },
   "dependencies": {
     "@tauri-apps/api": "^2",
     "@tauri-apps/plugin-opener": "^2",
     "lucide-react": "^1.60.0",
+    "net-snmp": "^3.29.2",
     "node-hid": "^3.4.0",
+    "nodemailer": "^10.1.7",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "recharts": "^3.10.1"
   },
   "devDependencies": {
+    "@playwright/test": "^1.64.1",
     "@tauri-apps/cli": "^2",
     "@testing-library/jest-dom": "^7.0.1",
     "@testing-library/react": "^16.3.3",
@@ -31,6 +40,7 @@
     "@types/react-dom": "^19.1.6",
     "@vitejs/plugin-react": "^6.0.2",
     "jsdom": "^30.1.3",
+    "playwright": "^1.64.1",
     "typescript": "~6.0.3",
     "vite": "^8.0.16",
     "vitest": "^5.0.5"

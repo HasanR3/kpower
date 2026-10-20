@@ -1,30 +1,38 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, beforeEach } from "vitest";
 import {
+  DEFAULT_SETTINGS,
   exportHistoryCsv,
   isDestructive,
   runControlCommand,
+  saveSettings,
   syncAlarmsFromSnapshot,
   type HistorySample,
 } from "./appData";
 import { snapshotFixture } from "./snapshotFixture";
 
 describe("appData", () => {
+  beforeEach(() => {
+    localStorage.clear();
+    saveSettings({ ...DEFAULT_SETTINGS, allowControl: false });
+  });
+
   it("marks close output and EOD self-test as destructive", () => {
     expect(isDestructive("closeOutputMinutes")).toBe(true);
     expect(isDestructive("selfTestEod")).toBe(true);
     expect(isDestructive("selfTest10s")).toBe(false);
   });
 
-  it("rejects commands when disconnected", () => {
-    const result = runControlCommand("selfTest10s", false);
+  it("blocks commands when allowControl is off", async () => {
+    const result = await runControlCommand("selfTest10s", true);
     expect(result.ok).toBe(false);
-    expect(result.message).toMatch(/not connected/i);
+    expect(result.message).toMatch(/allow control/i);
   });
 
-  it("does not pretend control commands succeed while HID writes are unmapped", () => {
-    const result = runControlCommand("selfTest10s", true);
+  it("rejects commands when disconnected even if control allowed", async () => {
+    saveSettings({ ...DEFAULT_SETTINGS, allowControl: true });
+    const result = await runControlCommand("selfTest10s", false);
     expect(result.ok).toBe(false);
-    expect(result.message).toMatch(/not sent/i);
+    expect(result.message).toMatch(/not connected/i);
   });
 
   it("syncs live ON_BATTERY into active alarms and clears when gone", () => {

@@ -12,6 +12,7 @@ export default defineConfig(() => ({
     environment: "jsdom",
     setupFiles: ["./src/test/setup.ts"],
     globals: false,
+    exclude: ["**/node_modules/**", "**/e2e/**", "**/dist/**", "**/src-tauri/**"],
   },
 
   // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`

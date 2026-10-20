@@ -114,9 +114,9 @@ export function SchedulePage() {
               <CalendarPlus aria-hidden size={15} strokeWidth={2} />
               Add schedule
             </button>
-            <p className="banner banner--warn" role="status">
-              Schedules are stored locally. Due jobs are not executed against the UPS until HID
-              control writes and a scheduler runner ship.
+            <p className="banner" role="status">
+              Due jobs run automatically every ~15s while this app is open, via the HID bridge
+              (self-test / buzzer / UPS off). Host OS shutdown jobs are logged but not executed yet.
             </p>
           </form>
         </section>

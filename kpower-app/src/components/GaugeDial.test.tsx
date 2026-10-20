@@ -12,8 +12,8 @@ function tipAt(ratio: number) {
   const deg = START + SWEEP * ratio;
   const rad = (deg * Math.PI) / 180;
   return {
-    x: CX + Math.cos(rad) * (R - 14),
-    y: CY + Math.sin(rad) * (R - 14),
+    x: CX + Math.cos(rad) * (R - 12),
+    y: CY + Math.sin(rad) * (R - 12),
   };
 }
 

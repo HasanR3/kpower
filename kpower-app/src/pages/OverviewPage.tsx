@@ -6,7 +6,6 @@ import {
   Cable,
   ClipboardList,
   Gauge,
-  HeartPulse,
   History,
   Settings2,
   ShieldAlert,
@@ -38,22 +37,15 @@ import {
   downsampleHistory,
   formatRuntime,
 } from "../lib/healthScore";
+import {
+  DEFAULT_DEVICE,
+  deriveMonitoringStatus,
+  formatLastUpdate,
+  liveValue,
+  loadDevices,
+} from "../lib/monitoring";
 import type { UpsSnapshot } from "../lib/types";
-
-function bandLabel(band: string): string {
-  switch (band) {
-    case "excellent":
-      return "Nominal";
-    case "good":
-      return "Stable";
-    case "degraded":
-      return "Attention";
-    case "critical":
-      return "Critical";
-    default:
-      return "Offline";
-  }
-}
+import { getLastSuccessfulPollAt, getUpsLinkError } from "../lib/upsStore";
 
 export function OverviewPage({
   snapshot,
@@ -65,16 +57,30 @@ export function OverviewPage({
   const [alarms, setAlarms] = useState<AlarmRecord[]>(() => loadAlarms());
   const [history, setHistory] = useState<HistorySample[]>(() => loadHistory());
   const [events, setEvents] = useState<CommandResult[]>(() => loadCommandResults());
+  const [now, setNow] = useState(() => Date.now());
   const settings = useMemo(() => loadSettings(), []);
+  const device = useMemo(() => loadDevices()[0] ?? DEFAULT_DEVICE, []);
 
   useEffect(() => {
     const id = setInterval(() => {
       setAlarms(loadAlarms());
       setHistory(loadHistory());
       setEvents(loadCommandResults());
+      setNow(Date.now());
     }, 1500);
     return () => clearInterval(id);
   }, []);
+
+  const status = useMemo(
+    () =>
+      deriveMonitoringStatus(
+        snapshot,
+        getLastSuccessfulPollAt(),
+        getUpsLinkError(),
+        now,
+      ),
+    [snapshot, now],
+  );
 
   const health = useMemo(
     () => computeHealth(snapshot, alarms, settings),
@@ -82,6 +88,9 @@ export function OverviewPage({
   );
 
   const activeAlarms = alarms.filter((a) => a.active);
+  const connected = Boolean(snapshot?.connected);
+  const showLive = connected && (status.comms === "live" || status.comms === "stale");
+
   const chartData = useMemo(
     () =>
       downsampleHistory(history.slice(-180), 40).map((s) => ({
@@ -92,50 +101,80 @@ export function OverviewPage({
     [history],
   );
 
-  const connected = Boolean(snapshot?.connected);
-  const nowLabel = new Date().toLocaleString(undefined, {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  const v = (fmt: () => string) => liveValue(status, connected, fmt);
 
   return (
     <section className="page overview">
-      <header className="overview-hero">
-        <div>
-          <p className="overview-kicker">Operations</p>
-          <h1>Power infrastructure</h1>
-          <p className="overview-sub">
-            Live UPS posture for this host · {nowLabel}
+      <header className="ops-masthead">
+        <div className="ops-masthead__main">
+          <p className="ops-masthead__kicker">Monitoring console</p>
+          <h1 className="ops-masthead__title">{device.name}</h1>
+          <p className="ops-masthead__sub">
+            {device.manufacturer} · {device.model} · {device.location}
           </p>
         </div>
-        <div className={`health-orb health-orb--${health.band}`} aria-label={`Health ${health.score}`}>
-          <HeartPulse className="health-orb__icon" aria-hidden size={18} strokeWidth={2} />
-          <div className="health-orb__score">{health.score}</div>
-          <div className="health-orb__band">{bandLabel(health.band)}</div>
-          <div className="health-orb__caption">Health index</div>
-        </div>
+        <dl className="ops-masthead__meta">
+          <div>
+            <dt>Comms</dt>
+            <dd className={`ops-tag ops-tag--${status.comms}`}>{status.message}</dd>
+          </div>
+          <div>
+            <dt>UPS mode</dt>
+            <dd>{status.upsMode}</dd>
+          </div>
+          <div>
+            <dt>Last update</dt>
+            <dd className="tabular">{formatLastUpdate(status.lastUpdateMs)}</dd>
+          </div>
+          <div>
+            <dt>Health</dt>
+            <dd className="tabular">
+              {showLive ? health.score : "—"}{" "}
+              <span className="muted">{showLive ? health.band : "n/a"}</span>
+            </dd>
+          </div>
+        </dl>
       </header>
+
+      {!showLive ? (
+        <p className="banner banner--warn" role="status">
+          {status.comms === "bridge_down"
+            ? "HID bridge unreachable. Run npm run hid with stock KPower closed."
+            : "UPS offline or unreachable. Readings below are not live."}
+        </p>
+      ) : status.comms === "stale" ? (
+        <p className="banner banner--warn" role="status">
+          Telemetry is stale — values may not reflect the UPS right now.
+        </p>
+      ) : null}
 
       <div className="kpi-rail" role="group" aria-label="Key performance indicators">
         <article className="kpi">
           <div className="kpi__label">
             <Cable aria-hidden size={14} strokeWidth={2} /> Link
           </div>
-          <div className={`kpi__value ${connected ? "is-ok" : "is-bad"}`}>
-            {connected ? "Online" : "Down"}
+          <div
+            className={`kpi__value ${
+              status.comms === "live" ? "is-ok" : status.comms === "stale" ? "is-warn" : "is-bad"
+            }`}
+          >
+            {status.comms === "live"
+              ? "Live"
+              : status.comms === "stale"
+                ? "Stale"
+                : status.comms === "bridge_down"
+                  ? "Bridge"
+                  : "Down"}
           </div>
-          <div className="kpi__meta">{connected ? snapshot?.mode ?? "—" : "No telemetry"}</div>
+          <div className="kpi__meta">{device.protocol.toUpperCase()}</div>
         </article>
         <article className="kpi">
           <div className="kpi__label">
             <Gauge aria-hidden size={14} strokeWidth={2} /> Load
           </div>
           <div className="kpi__value kpi__value--num">
-            {connected ? snapshot!.loadPercent.toFixed(0) : "—"}
-            <span className="kpi__unit">%</span>
+            {v(() => snapshot!.loadPercent.toFixed(0))}
+            {showLive ? <span className="kpi__unit">%</span> : null}
           </div>
           <div className="kpi__meta">Output utilization</div>
         </article>
@@ -144,11 +183,11 @@ export function OverviewPage({
             <BatteryMedium aria-hidden size={14} strokeWidth={2} /> Battery
           </div>
           <div className="kpi__value kpi__value--num">
-            {connected ? snapshot!.batteryPercent.toFixed(0) : "—"}
-            <span className="kpi__unit">%</span>
+            {v(() => snapshot!.batteryPercent.toFixed(0))}
+            {showLive ? <span className="kpi__unit">%</span> : null}
           </div>
           <div className="kpi__meta">
-            {connected ? `Runtime ${formatRuntime(snapshot!.runtimeSeconds)}` : "Unavailable"}
+            {showLive ? `Runtime ${formatRuntime(snapshot!.runtimeSeconds)}` : "Unavailable"}
           </div>
         </article>
         <article className="kpi">
@@ -162,18 +201,18 @@ export function OverviewPage({
         </article>
         <article className="kpi">
           <div className="kpi__label">
-            <Timer aria-hidden size={14} strokeWidth={2} /> Policy window
+            <Timer aria-hidden size={14} strokeWidth={2} /> Policy
           </div>
           <div className="kpi__value kpi__value--num">
-            {health.minutesToPolicyShutdown == null
-              ? "—"
-              : Math.max(0, Math.round(health.minutesToPolicyShutdown))}
-            {health.minutesToPolicyShutdown != null ? (
+            {showLive && health.minutesToPolicyShutdown != null
+              ? Math.max(0, Math.round(health.minutesToPolicyShutdown))
+              : "—"}
+            {showLive && health.minutesToPolicyShutdown != null ? (
               <span className="kpi__unit">min</span>
             ) : null}
           </div>
           <div className="kpi__meta">
-            Auto-shutdown ≤ {settings.shutdownBatteryPercent}% / {settings.shutdownRuntimeSeconds}s
+            ≤ {settings.shutdownBatteryPercent}% / {settings.shutdownRuntimeSeconds}s
           </div>
         </article>
       </div>
@@ -186,11 +225,11 @@ export function OverviewPage({
             <h2>
               <Activity aria-hidden size={16} strokeWidth={2} /> Load & reserve
             </h2>
-            <span className="panel__tag">Rolling samples</span>
+            <span className="panel__tag">{settings.historyRetentionDays}d retention</span>
           </div>
           {chartData.length < 2 ? (
             <p className="panel__empty">
-              Collecting telemetry… keep Overview or Device open for a few seconds.
+              Collecting telemetry… keep the app open with the HID bridge running.
             </p>
           ) : (
             <div className="overview-chart">
@@ -198,12 +237,12 @@ export function OverviewPage({
                 <AreaChart data={chartData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
                   <defs>
                     <linearGradient id="loadFill" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#2f6fed" stopOpacity={0.28} />
-                      <stop offset="100%" stopColor="#2f6fed" stopOpacity={0} />
+                      <stop offset="0%" stopColor="#1d4ed8" stopOpacity={0.22} />
+                      <stop offset="100%" stopColor="#1d4ed8" stopOpacity={0} />
                     </linearGradient>
                     <linearGradient id="batFill" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#1f9d55" stopOpacity={0.22} />
-                      <stop offset="100%" stopColor="#1f9d55" stopOpacity={0} />
+                      <stop offset="0%" stopColor="#0f7a45" stopOpacity={0.2} />
+                      <stop offset="100%" stopColor="#0f7a45" stopOpacity={0} />
                     </linearGradient>
                   </defs>
                   <CartesianGrid stroke="#e6ebf1" vertical={false} />
@@ -223,7 +262,7 @@ export function OverviewPage({
                   />
                   <Tooltip
                     contentStyle={{
-                      borderRadius: 8,
+                      borderRadius: 6,
                       border: "1px solid #d8dee6",
                       boxShadow: "none",
                       fontFamily: "var(--font)",
@@ -233,7 +272,7 @@ export function OverviewPage({
                     type="monotone"
                     dataKey="load"
                     name="Load %"
-                    stroke="#2f6fed"
+                    stroke="#1d4ed8"
                     fill="url(#loadFill)"
                     strokeWidth={2}
                     isAnimationActive={false}
@@ -242,7 +281,7 @@ export function OverviewPage({
                     type="monotone"
                     dataKey="battery"
                     name="Battery %"
-                    stroke="#1f9d55"
+                    stroke="#0f7a45"
                     fill="url(#batFill)"
                     strokeWidth={2}
                     isAnimationActive={false}
@@ -256,16 +295,8 @@ export function OverviewPage({
         <aside className="panel">
           <div className="panel__head">
             <h2>
-              <ShieldAlert aria-hidden size={16} strokeWidth={2} /> Risk factors
+              <ShieldAlert aria-hidden size={16} strokeWidth={2} /> Active alarms
             </h2>
-          </div>
-          <ul className="factor-list">
-            {health.factors.map((f) => (
-              <li key={f}>{f}</li>
-            ))}
-          </ul>
-          <div className="panel__head panel__head--spaced">
-            <h2>Active alarms</h2>
             <button type="button" className="linkish" onClick={() => onNavigate("alarms")}>
               Open
             </button>
@@ -274,7 +305,7 @@ export function OverviewPage({
             <p className="panel__empty">No active alarms.</p>
           ) : (
             <ul className="feed-list">
-              {activeAlarms.slice(0, 5).map((a) => (
+              {activeAlarms.slice(0, 6).map((a) => (
                 <li key={a.id}>
                   <span className={`sev sev--${a.severity}`} />
                   <div>
@@ -285,45 +316,53 @@ export function OverviewPage({
               ))}
             </ul>
           )}
+          <div className="panel__head panel__head--spaced">
+            <h2>Risk factors</h2>
+          </div>
+          <ul className="factor-list">
+            {health.factors.map((f) => (
+              <li key={f}>{f}</li>
+            ))}
+          </ul>
         </aside>
 
         <section className="panel">
           <div className="panel__head">
             <h2>
-              <Zap aria-hidden size={16} strokeWidth={2} /> Electrical snapshot
+              <Zap aria-hidden size={16} strokeWidth={2} /> Electrical
             </h2>
             <button type="button" className="linkish" onClick={() => onNavigate("device")}>
-              Device detail
+              Device
             </button>
           </div>
           <dl className="spec-grid">
             <div>
               <dt>Input voltage</dt>
-              <dd>{connected ? `${snapshot!.inputVoltage.toFixed(1)} V` : "—"}</dd>
+              <dd>{v(() => `${snapshot!.inputVoltage.toFixed(1)} V`)}</dd>
             </div>
             <div>
               <dt>Output voltage</dt>
-              <dd>{connected ? `${snapshot!.outputVoltage.toFixed(1)} V` : "—"}</dd>
+              <dd>{v(() => `${snapshot!.outputVoltage.toFixed(1)} V`)}</dd>
             </div>
             <div>
-              <dt>Input frequency</dt>
-              <dd>{connected ? `${snapshot!.frequency.toFixed(1)} Hz` : "—"}</dd>
+              <dt>Frequency</dt>
+              <dd>{v(() => `${snapshot!.frequency.toFixed(1)} Hz`)}</dd>
             </div>
             <div>
-              <dt>Battery single voltage</dt>
-              <dd>{connected ? `${snapshot!.batterySingleVoltage.toFixed(2)} V` : "—"}</dd>
+              <dt>Battery cell</dt>
+              <dd>{v(() => `${snapshot!.batterySingleVoltage.toFixed(2)} V`)}</dd>
             </div>
             <div>
-              <dt>UPS load</dt>
-              <dd>{connected ? `${snapshot!.loadPercent.toFixed(0)} %` : "—"}</dd>
+              <dt>Load</dt>
+              <dd>{v(() => `${snapshot!.loadPercent.toFixed(0)} %`)}</dd>
             </div>
             <div>
               <dt>Temperature</dt>
-              <dd>{connected ? `${snapshot!.temperatureC.toFixed(1)} °C` : "—"}</dd>
+              <dd>{v(() => `${snapshot!.temperatureC.toFixed(1)} °C`)}</dd>
             </div>
             <div>
-              <dt>Comms</dt>
-              <dd>{settings.commsType.toUpperCase()}</dd>
+              <dt>Protocol</dt>
+              <dd>HID (SNMP/NUT stubbed)</dd>
             </div>
             <div>
               <dt>Poll</dt>
@@ -338,9 +377,14 @@ export function OverviewPage({
               <ClipboardList aria-hidden size={16} strokeWidth={2} /> Control activity
             </h2>
             <button type="button" className="linkish" onClick={() => onNavigate("control")}>
-              Commands
+              Control
             </button>
           </div>
+          {!settings.allowControl ? (
+            <p className="panel__empty">
+              Control writes are off. Enable “Allow control” in Settings only when needed.
+            </p>
+          ) : null}
           {events.length === 0 ? (
             <p className="panel__empty">No recent commands.</p>
           ) : (
@@ -361,14 +405,17 @@ export function OverviewPage({
       </div>
 
       <div className="overview-actions">
-        <button type="button" className="btn btn--primary" onClick={() => onNavigate("control")}>
-          <Zap aria-hidden size={15} strokeWidth={2} /> Issue command
+        <button type="button" className="btn btn--primary" onClick={() => onNavigate("device")}>
+          <Zap aria-hidden size={15} strokeWidth={2} /> Device detail
+        </button>
+        <button type="button" className="btn btn--secondary" onClick={() => onNavigate("alarms")}>
+          <BellRing aria-hidden size={15} strokeWidth={2} /> Alarms
         </button>
         <button type="button" className="btn btn--secondary" onClick={() => onNavigate("history")}>
-          <History aria-hidden size={15} strokeWidth={2} /> Audit history
+          <History aria-hidden size={15} strokeWidth={2} /> History
         </button>
         <button type="button" className="btn btn--secondary" onClick={() => onNavigate("settings")}>
-          <Settings2 aria-hidden size={15} strokeWidth={2} /> Policies
+          <Settings2 aria-hidden size={15} strokeWidth={2} /> Settings
         </button>
       </div>
     </section>

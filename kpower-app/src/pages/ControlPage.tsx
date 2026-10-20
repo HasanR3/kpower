@@ -12,6 +12,7 @@ import {
   controlCommandLabel,
   isDestructive,
   loadCommandResults,
+  loadSettings,
   runControlCommand,
   saveCommandResults,
   type CommandResult,
@@ -95,6 +96,7 @@ export function ControlPage({ snapshot }: { snapshot: UpsSnapshot | null }) {
   const [flash, setFlash] = useState<string | null>(null);
 
   const connected = Boolean(snapshot?.connected);
+  const allowControl = loadSettings().allowControl;
   const succeeded = results.filter((r) => r.ok).length;
   const failed = results.filter((r) => !r.ok).length;
   const selectedMeta = GROUPS.flatMap((g) => g.options).find((o) => o.id === selected);
@@ -110,8 +112,8 @@ export function ControlPage({ snapshot }: { snapshot: UpsSnapshot | null }) {
     return undefined;
   };
 
-  const send = (cmd: ControlCommand) => {
-    const result = runControlCommand(cmd, connected, detailFor(cmd));
+  const send = async (cmd: ControlCommand) => {
+    const result = await runControlCommand(cmd, connected, detailFor(cmd));
     persist([result, ...results].slice(0, 200));
     setFlash(result.message);
     setConfirmOpen(false);
@@ -137,13 +139,20 @@ export function ControlPage({ snapshot }: { snapshot: UpsSnapshot | null }) {
         Icon={Zap}
         kicker="Operations"
         title="UPS Control"
-        subtitle="Self-test, output, and buzzer commands — HID write opcodes not mapped yet; failed attempts are logged honestly"
+        subtitle="Self-test, output, and buzzer — gated behind Settings → Allow control"
       />
 
-      <p className="banner banner--warn" role="status">
-        Control commands are prepared and audited locally, but are not written to the UPS until the
-        HID control report map ships. Do not rely on this screen for live protective actions.
-      </p>
+      {!allowControl ? (
+        <p className="banner banner--warn" role="status">
+          Control is off (safe default). Enable “Allow control” in Settings, and run the HID bridge
+          with ALLOW_HID_CONTROL=1, only when you intentionally need writes. Keep stock KPower closed.
+        </p>
+      ) : (
+        <p className="banner" role="status">
+          Control is enabled. Destructive actions require confirmation. Incorrect self-test commands
+          can make the UPS beep and flash — use cancel carefully.
+        </p>
+      )}
 
       <div className="ops-bar" role="status">
         <div className="ops-bar__item">
@@ -262,7 +271,12 @@ export function ControlPage({ snapshot }: { snapshot: UpsSnapshot | null }) {
               )}
               {flash ? <p className="flash">{flash}</p> : null}
             </div>
-            <button type="button" className="btn btn--primary" onClick={onSend}>
+            <button
+              type="button"
+              className="btn btn--primary"
+              onClick={onSend}
+              disabled={!allowControl || !connected}
+            >
               <Send aria-hidden size={15} strokeWidth={2} />
               Send command
             </button>

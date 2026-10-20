@@ -60,7 +60,23 @@ export interface AppSettings {
   minimizeToTray: boolean;
   simulateAlarms: boolean;
 
-  /** Email notification settings (stock Common Parameters → E-Mail) */
+  /** When false, HID control writes are refused (default after self-test incident). */
+  allowControl: boolean;
+
+  /** History retention (days). */
+  historyRetentionDays: number;
+
+  /** Safe-default alarm thresholds (editable). */
+  alarmLoadWarnPercent: number;
+  alarmLoadCritPercent: number;
+  alarmBatteryWarnPercent: number;
+  alarmBatteryCritPercent: number;
+  alarmRuntimeWarnSeconds: number;
+  alarmVoltageNominal: number;
+  alarmVoltageTolPercent: number;
+  alarmTempWarnC: number;
+
+  /** Email notification settings */
   emailEnabled: boolean;
   emailSmtpHost: string;
   emailSmtpPort: number;
@@ -71,6 +87,26 @@ export interface AppSettings {
   emailOnAlarm: boolean;
   emailOnPowerFail: boolean;
   emailOnLowBattery: boolean;
+
+  /** Notification stubs (not delivered until configured + verified). */
+  telegramEnabled: boolean;
+  telegramBotToken: string;
+  telegramChatId: string;
+  /** Minutes on battery before extended-outage Telegram alert. */
+  telegramOutageMinutes: number;
+  telegramNotifyPowerFail: boolean;
+  telegramNotifyPowerRestore: boolean;
+  telegramNotifyExtendedOutage: boolean;
+  webhookEnabled: boolean;
+  webhookUrl: string;
+
+  /** Protocol stubs — HID is live; these are placeholders only. */
+  snmpEnabled: boolean;
+  snmpHost: string;
+  snmpCommunity: string;
+  nutEnabled: boolean;
+  nutHost: string;
+  nutUpsName: string;
 
   /** Stock Shutdown → KPower power control */
   powerControlEnabled: boolean;
@@ -105,6 +141,18 @@ export const DEFAULT_SETTINGS: AppSettings = {
   minimizeToTray: true,
   simulateAlarms: false,
 
+  allowControl: false,
+  historyRetentionDays: 30,
+
+  alarmLoadWarnPercent: 80,
+  alarmLoadCritPercent: 90,
+  alarmBatteryWarnPercent: 30,
+  alarmBatteryCritPercent: 15,
+  alarmRuntimeWarnSeconds: 600,
+  alarmVoltageNominal: 230,
+  alarmVoltageTolPercent: 10,
+  alarmTempWarnC: 40,
+
   emailEnabled: false,
   emailSmtpHost: "",
   emailSmtpPort: 587,
@@ -115,6 +163,23 @@ export const DEFAULT_SETTINGS: AppSettings = {
   emailOnAlarm: true,
   emailOnPowerFail: true,
   emailOnLowBattery: true,
+
+  telegramEnabled: false,
+  telegramBotToken: "",
+  telegramChatId: "",
+  telegramOutageMinutes: 5,
+  telegramNotifyPowerFail: true,
+  telegramNotifyPowerRestore: true,
+  telegramNotifyExtendedOutage: true,
+  webhookEnabled: false,
+  webhookUrl: "",
+
+  snmpEnabled: false,
+  snmpHost: "",
+  snmpCommunity: "",
+  nutEnabled: false,
+  nutHost: "",
+  nutUpsName: "",
 
   powerControlEnabled: true,
   shutdownMinutesAfterAcFault: 0,
@@ -177,7 +242,11 @@ export function loadHistory(): HistorySample[] {
 }
 
 export function saveHistory(items: HistorySample[]) {
-  saveJson(HISTORY_KEY, items.slice(-2000));
+  const days = loadSettings().historyRetentionDays || 30;
+  const cutoff = Date.now() - days * 24 * 60 * 60 * 1000;
+  const pruned = items.filter((s) => s.at >= cutoff);
+  // Cap samples to keep localStorage healthy (~1 sample / 5s → ~30d needs pruning)
+  saveJson(HISTORY_KEY, pruned.slice(-20_000));
 }
 
 export function loadCommandResults(): CommandResult[] {
@@ -216,19 +285,19 @@ const LIVE_ALARM_META: Record<
 };
 
 /**
- * Keep AlarmRecord store aligned with live UPS alarm codes from HID telemetry.
- * Does not invent demo alarms.
+ * Keep alarms aligned with device codes + configured thresholds.
+ * Prefer evaluateAlarms from alarmEngine (used by App).
  */
 export function syncAlarmsFromSnapshot(
   existing: AlarmRecord[],
   snapshot: UpsSnapshot | null,
 ): AlarmRecord[] {
+  // Lightweight path for tests / callers without poll metadata
   const codes = new Set(snapshot?.connected ? snapshot.alarmCodes : []);
   const now = Date.now();
   let next = existing.map((a) => {
     if (!a.active) return a;
     if (codes.has(a.code)) return a;
-    // Clear live-synced alarms that are no longer present
     if (a.id.startsWith("live-")) {
       return { ...a, active: false, clearedAt: now };
     }
@@ -236,7 +305,7 @@ export function syncAlarmsFromSnapshot(
   });
 
   for (const code of codes) {
-    const open = next.find((a) => a.active && a.code === code);
+    const open = next.find((a) => a.active && a.code === code && a.id.startsWith("live-"));
     if (open) continue;
     const meta = LIVE_ALARM_META[code] ?? {
       message: `UPS reported condition ${code}`,
@@ -331,41 +400,86 @@ export function isDestructive(cmd: ControlCommand): boolean {
   return cmd === "closeOutputMinutes" || cmd === "selfTestEod";
 }
 
+const HID_COMMAND_URL =
+  (import.meta.env.VITE_HID_BRIDGE_URL as string | undefined)?.replace(/\/snapshot$/, "/command") ??
+  "http://127.0.0.1:3921/command";
+
+function parseMinutes(detail?: string): number | undefined {
+  if (!detail) return undefined;
+  const m = detail.match(/(\d+)\s*minute/i);
+  return m ? Number(m[1]) : undefined;
+}
+
 /**
- * Attempt a UPS control command.
- * HID feature-report writes for stock control opcodes are not mapped yet —
- * never report success unless the device actually accepted the command.
+ * Send control via HID bridge only when settings.allowControl is true.
+ * Default OFF after the live self-test / beeping incident.
  */
-export function runControlCommand(
+export async function runControlCommand(
   cmd: ControlCommand,
   connected: boolean,
   detail?: string,
-): CommandResult {
+): Promise<CommandResult> {
   const id = `cmd-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
   const label = controlCommandLabel(cmd);
+  const at = Date.now();
+  const settings = loadSettings();
+
+  if (!settings.allowControl) {
+    return {
+      id,
+      command: cmd,
+      ok: false,
+      message: `${label} blocked: enable “Allow control” in Settings (default off for safety)`,
+      at,
+      detail,
+    };
+  }
   if (!connected) {
     return {
       id,
       command: cmd,
       ok: false,
       message: `${label} failed: UPS not connected`,
-      at: Date.now(),
+      at,
       detail,
     };
   }
-  return {
-    id,
-    command: cmd,
-    ok: false,
-    message: detail
-      ? `${label} not sent (${detail}): HID control write path not implemented`
-      : `${label} not sent: HID control write path not implemented`,
-    at: Date.now(),
-    detail,
-  };
+  try {
+    const res = await fetch(HID_COMMAND_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        command: cmd,
+        minutes: parseMinutes(detail),
+        allowControl: true,
+      }),
+    });
+    const body = (await res.json()) as { ok?: boolean; message?: string };
+    return {
+      id,
+      command: cmd,
+      ok: Boolean(body.ok) && res.ok,
+      message: body.message
+        ? `${label}: ${body.message}`
+        : res.ok
+          ? `${label} sent`
+          : `${label} failed (HTTP ${res.status})`,
+      at,
+      detail,
+    };
+  } catch {
+    return {
+      id,
+      command: cmd,
+      ok: false,
+      message: `${label} failed: HID bridge unreachable — run npm run hid`,
+      at,
+      detail,
+    };
+  }
 }
 
-/** @deprecated Use runControlCommand — kept for any stale imports during transition */
+/** @deprecated */
 export const runSimulatedCommand = runControlCommand;
 
 export function newId(prefix: string): string {

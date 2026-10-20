@@ -1,5 +1,5 @@
 import { useState, type FormEvent, type ReactNode } from "react";
-import { Cable, Mail, Save, Settings, Shield } from "lucide-react";
+import { Activity, Cable, Mail, Radio, Save, Settings, Shield } from "lucide-react";
 import { PageHero } from "../components/PageHero";
 import {
   DEFAULT_SETTINGS,
@@ -7,12 +7,20 @@ import {
   saveSettings,
   type AppSettings,
 } from "../lib/appData";
-import { applySettingsRuntime } from "../lib/upsStore";
+import { importStockHistory } from "../lib/historyImport";
+import {
+  syncTelegramBotConfig,
+  testSmtp,
+  testTelegram,
+  testWebhook,
+} from "../lib/notifications";
+import { applySettingsRuntime, probeAlternateProtocols } from "../lib/upsStore";
 
-type SettingsSection = "email" | "shutdown" | "general";
+type SettingsSection = "monitoring" | "email" | "shutdown" | "general";
 
 const TABS: { id: SettingsSection; label: string; Icon: typeof Mail }[] = [
-  { id: "email", label: "E-Mail", Icon: Mail },
+  { id: "monitoring", label: "Monitoring", Icon: Activity },
+  { id: "email", label: "Notifications", Icon: Mail },
   { id: "shutdown", label: "Shutdown", Icon: Shield },
   { id: "general", label: "Connectivity", Icon: Cable },
 ];
@@ -77,7 +85,9 @@ function UnitInput({
 export function SettingsPage() {
   const [settings, setSettings] = useState<AppSettings>(() => loadSettings());
   const [saved, setSaved] = useState(false);
-  const [section, setSection] = useState<SettingsSection>("shutdown");
+  const [section, setSection] = useState<SettingsSection>("monitoring");
+  const [flash, setFlash] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
 
   const update = <K extends keyof AppSettings>(key: K, value: AppSettings[K]) => {
     setSettings((s) => {
@@ -90,10 +100,14 @@ export function SettingsPage() {
     setSaved(false);
   };
 
-  const onSave = (e: FormEvent) => {
+  const onSave = async (e: FormEvent) => {
     e.preventDefault();
     saveSettings(settings);
     applySettingsRuntime(settings);
+    if (settings.telegramEnabled && settings.telegramBotToken) {
+      const r = await syncTelegramBotConfig(settings);
+      setFlash(r.message);
+    }
     setSaved(true);
   };
 
@@ -108,7 +122,7 @@ export function SettingsPage() {
         Icon={Settings}
         kicker="Configuration"
         title="Settings"
-        subtitle="E-mail alerts, shutdown policy, and USB HID connectivity"
+        subtitle="Monitoring thresholds, notifications, shutdown policy, and HID connectivity"
       />
 
       <form className="settings-workspace" onSubmit={onSave}>
@@ -129,6 +143,238 @@ export function SettingsPage() {
         </div>
 
         <div className="settings-body" role="tabpanel">
+          {section === "monitoring" ? (
+            <>
+              <section className="panel settings-surface">
+                <div className="panel__head">
+                  <h2>
+                    <Activity aria-hidden size={16} strokeWidth={2} /> Monitoring
+                  </h2>
+                </div>
+                <MetricRow label="Poll interval" hint="How often the HID bridge is queried">
+                  <UnitInput
+                    value={settings.pollIntervalMs}
+                    min={500}
+                    max={10000}
+                    unit="ms"
+                    ariaLabel="Poll interval milliseconds"
+                    onChange={(n) => update("pollIntervalMs", n)}
+                  />
+                </MetricRow>
+                <MetricRow label="History retention" hint="Local samples kept for charts">
+                  <UnitInput
+                    value={settings.historyRetentionDays}
+                    min={1}
+                    max={365}
+                    unit="days"
+                    ariaLabel="History retention days"
+                    onChange={(n) => update("historyRetentionDays", n)}
+                  />
+                </MetricRow>
+                <label className="toggle-row">
+                  <span>
+                    <strong>Allow control</strong>
+                    <span className="toggle-row__hint">
+                      Off by default. Also requires npm run hid:control (ALLOW_HID_CONTROL=1).
+                    </span>
+                  </span>
+                  <input
+                    type="checkbox"
+                    checked={settings.allowControl}
+                    onChange={(e) => update("allowControl", e.target.checked)}
+                  />
+                </label>
+                <div className="settings-actions-row">
+                  <button
+                    type="button"
+                    className="btn btn--secondary"
+                    disabled={busy}
+                    onClick={async () => {
+                      setBusy(true);
+                      const r = await importStockHistory();
+                      setFlash(r.message);
+                      setBusy(false);
+                    }}
+                  >
+                    Import stock history
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn--secondary"
+                    disabled={busy}
+                    onClick={async () => {
+                      setBusy(true);
+                      saveSettings(settings);
+                      const r = await probeAlternateProtocols(settings);
+                      setFlash(r.message);
+                      setBusy(false);
+                    }}
+                  >
+                    Test SNMP / NUT
+                  </button>
+                </div>
+                {flash ? <p className="flash" role="status">{flash}</p> : null}
+              </section>
+
+              <section className="panel settings-surface">
+                <div className="panel__head">
+                  <h2>Alarm thresholds</h2>
+                </div>
+                <MetricRow label="Load warning">
+                  <UnitInput
+                    value={settings.alarmLoadWarnPercent}
+                    min={1}
+                    max={100}
+                    unit="%"
+                    ariaLabel="Load warning percent"
+                    onChange={(n) => update("alarmLoadWarnPercent", n)}
+                  />
+                </MetricRow>
+                <MetricRow label="Load critical">
+                  <UnitInput
+                    value={settings.alarmLoadCritPercent}
+                    min={1}
+                    max={100}
+                    unit="%"
+                    ariaLabel="Load critical percent"
+                    onChange={(n) => update("alarmLoadCritPercent", n)}
+                  />
+                </MetricRow>
+                <MetricRow label="Battery warning">
+                  <UnitInput
+                    value={settings.alarmBatteryWarnPercent}
+                    min={1}
+                    max={100}
+                    unit="%"
+                    ariaLabel="Battery warning percent"
+                    onChange={(n) => update("alarmBatteryWarnPercent", n)}
+                  />
+                </MetricRow>
+                <MetricRow label="Battery critical">
+                  <UnitInput
+                    value={settings.alarmBatteryCritPercent}
+                    min={1}
+                    max={100}
+                    unit="%"
+                    ariaLabel="Battery critical percent"
+                    onChange={(n) => update("alarmBatteryCritPercent", n)}
+                  />
+                </MetricRow>
+                <MetricRow label="Runtime warning (on battery)">
+                  <UnitInput
+                    value={Math.round(settings.alarmRuntimeWarnSeconds / 60)}
+                    min={1}
+                    max={120}
+                    unit="min"
+                    ariaLabel="Runtime warning minutes"
+                    onChange={(n) => update("alarmRuntimeWarnSeconds", n * 60)}
+                  />
+                </MetricRow>
+                <MetricRow label="Voltage nominal / tolerance">
+                  <div className="settings-inline-pair">
+                    <UnitInput
+                      value={settings.alarmVoltageNominal}
+                      min={100}
+                      max={250}
+                      unit="V"
+                      ariaLabel="Nominal voltage"
+                      onChange={(n) => update("alarmVoltageNominal", n)}
+                    />
+                    <UnitInput
+                      value={settings.alarmVoltageTolPercent}
+                      min={1}
+                      max={30}
+                      unit="%"
+                      ariaLabel="Voltage tolerance percent"
+                      onChange={(n) => update("alarmVoltageTolPercent", n)}
+                    />
+                  </div>
+                </MetricRow>
+                <MetricRow label="Temperature warning">
+                  <UnitInput
+                    value={settings.alarmTempWarnC}
+                    min={20}
+                    max={70}
+                    unit="°C"
+                    ariaLabel="Temperature warning"
+                    onChange={(n) => update("alarmTempWarnC", n)}
+                  />
+                </MetricRow>
+              </section>
+
+              <section className="panel settings-surface">
+                <div className="panel__head">
+                  <h2>
+                    <Radio aria-hidden size={16} strokeWidth={2} /> Protocol stubs
+                  </h2>
+                </div>
+                <p className="banner" role="status">
+                  HID is primary. When enabled, SNMP/NUT can be probed via the bridge (Test SNMP /
+                  NUT). Successful probes update live telemetry only if HID is offline.
+                </p>
+                <label className="toggle-row">
+                  <span>
+                    <strong>SNMP (stub)</strong>
+                  </span>
+                  <input
+                    type="checkbox"
+                    checked={settings.snmpEnabled}
+                    onChange={(e) => update("snmpEnabled", e.target.checked)}
+                  />
+                </label>
+                <div className="form-grid form-grid--2" data-disabled={!settings.snmpEnabled || undefined}>
+                  <label className="field">
+                    <span>Host</span>
+                    <input
+                      value={settings.snmpHost}
+                      disabled={!settings.snmpEnabled}
+                      onChange={(e) => update("snmpHost", e.target.value)}
+                      placeholder="192.168.1.10"
+                    />
+                  </label>
+                  <label className="field">
+                    <span>Community</span>
+                    <input
+                      type="password"
+                      value={settings.snmpCommunity}
+                      disabled={!settings.snmpEnabled}
+                      onChange={(e) => update("snmpCommunity", e.target.value)}
+                      placeholder="not used yet"
+                    />
+                  </label>
+                </div>
+                <label className="toggle-row">
+                  <span>
+                    <strong>NUT (stub)</strong>
+                  </span>
+                  <input
+                    type="checkbox"
+                    checked={settings.nutEnabled}
+                    onChange={(e) => update("nutEnabled", e.target.checked)}
+                  />
+                </label>
+                <div className="form-grid form-grid--2" data-disabled={!settings.nutEnabled || undefined}>
+                  <label className="field">
+                    <span>Host</span>
+                    <input
+                      value={settings.nutHost}
+                      disabled={!settings.nutEnabled}
+                      onChange={(e) => update("nutHost", e.target.value)}
+                    />
+                  </label>
+                  <label className="field">
+                    <span>UPS name</span>
+                    <input
+                      value={settings.nutUpsName}
+                      disabled={!settings.nutEnabled}
+                      onChange={(e) => update("nutUpsName", e.target.value)}
+                    />
+                  </label>
+                </div>
+              </section>
+            </>
+          ) : null}
+
           {section === "email" ? (
             <section className="panel settings-surface">
               <div className="panel__head">
@@ -137,9 +383,9 @@ export function SettingsPage() {
                 </h2>
               </div>
 
-              <p className="banner banner--warn" role="status">
-                SMTP settings are saved locally. Outbound mail delivery is not wired yet — enabling
-                this does not send messages until the mailer ships.
+              <p className="banner" role="status">
+                Delivery goes through the HID bridge. Use Test buttons below — success only means the
+                provider accepted the message, not that a human read it.
               </p>
 
               <label className="toggle-row">
@@ -242,6 +488,156 @@ export function SettingsPage() {
                   </label>
                 </div>
               </div>
+
+              <div className="settings-actions-row">
+                <button
+                  type="button"
+                  className="btn btn--secondary"
+                  disabled={busy || !settings.emailEnabled}
+                  onClick={async () => {
+                    setBusy(true);
+                    saveSettings(settings);
+                    const r = await testSmtp(settings);
+                    setFlash(`${r.channel}: ${r.message}`);
+                    setBusy(false);
+                  }}
+                >
+                  Test SMTP
+                </button>
+              </div>
+
+              <div className="panel__head panel__head--spaced">
+                <h2>Telegram / webhook</h2>
+              </div>
+              <label className="toggle-row">
+                <span>
+                  <strong>Telegram bot</strong>
+                  <span className="toggle-row__hint">
+                    Commands (/status, /voltage, /load…) + power-fail alerts via HID bridge
+                  </span>
+                </span>
+                <input
+                  type="checkbox"
+                  checked={settings.telegramEnabled}
+                  onChange={(e) => update("telegramEnabled", e.target.checked)}
+                />
+              </label>
+              <div className="form-grid form-grid--2">
+                <label className="field">
+                  <span>Bot token</span>
+                  <input
+                    type="password"
+                    value={settings.telegramBotToken}
+                    disabled={!settings.telegramEnabled}
+                    onChange={(e) => update("telegramBotToken", e.target.value)}
+                  />
+                </label>
+                <label className="field">
+                  <span>Chat ID</span>
+                  <input
+                    value={settings.telegramChatId}
+                    disabled={!settings.telegramEnabled}
+                    onChange={(e) => update("telegramChatId", e.target.value)}
+                  />
+                </label>
+              </div>
+              <MetricRow
+                label="Extended outage alert"
+                hint="Notify if still on battery after this many minutes"
+              >
+                <UnitInput
+                  value={settings.telegramOutageMinutes || 5}
+                  min={1}
+                  max={240}
+                  unit="min"
+                  disabled={!settings.telegramEnabled}
+                  ariaLabel="Extended outage minutes"
+                  onChange={(n) => update("telegramOutageMinutes", n)}
+                />
+              </MetricRow>
+              <div className="choice-grid">
+                <label className="choice choice--plain">
+                  <input
+                    type="checkbox"
+                    checked={settings.telegramNotifyPowerFail !== false}
+                    disabled={!settings.telegramEnabled}
+                    onChange={(e) => update("telegramNotifyPowerFail", e.target.checked)}
+                  />
+                  <span>Alert when electricity goes off</span>
+                </label>
+                <label className="choice choice--plain">
+                  <input
+                    type="checkbox"
+                    checked={settings.telegramNotifyPowerRestore !== false}
+                    disabled={!settings.telegramEnabled}
+                    onChange={(e) => update("telegramNotifyPowerRestore", e.target.checked)}
+                  />
+                  <span>Alert when electricity comes back</span>
+                </label>
+                <label className="choice choice--plain">
+                  <input
+                    type="checkbox"
+                    checked={settings.telegramNotifyExtendedOutage !== false}
+                    disabled={!settings.telegramEnabled}
+                    onChange={(e) => update("telegramNotifyExtendedOutage", e.target.checked)}
+                  />
+                  <span>Alert if outage lasts ≥ threshold</span>
+                </label>
+              </div>
+              <p className="muted tiny">
+                Bot commands: /help /status /voltage /load /battery /freq /runtime /temp
+              </p>
+              <label className="toggle-row">
+                <span>
+                  <strong>Webhook</strong>
+                  <span className="toggle-row__hint">POST JSON on test / alarms</span>
+                </span>
+                <input
+                  type="checkbox"
+                  checked={settings.webhookEnabled}
+                  onChange={(e) => update("webhookEnabled", e.target.checked)}
+                />
+              </label>
+              <label className="field">
+                <span>Webhook URL</span>
+                <input
+                  value={settings.webhookUrl}
+                  disabled={!settings.webhookEnabled}
+                  onChange={(e) => update("webhookUrl", e.target.value)}
+                  placeholder="https://…"
+                />
+              </label>
+              <div className="settings-actions-row">
+                <button
+                  type="button"
+                  className="btn btn--secondary"
+                  disabled={busy || !settings.telegramEnabled}
+                  onClick={async () => {
+                    setBusy(true);
+                    saveSettings(settings);
+                    const r = await testTelegram(settings);
+                    setFlash(`${r.channel}: ${r.message}`);
+                    setBusy(false);
+                  }}
+                >
+                  Test Telegram
+                </button>
+                <button
+                  type="button"
+                  className="btn btn--secondary"
+                  disabled={busy || !settings.webhookEnabled}
+                  onClick={async () => {
+                    setBusy(true);
+                    saveSettings(settings);
+                    const r = await testWebhook(settings);
+                    setFlash(`${r.channel}: ${r.message}`);
+                    setBusy(false);
+                  }}
+                >
+                  Test webhook
+                </button>
+              </div>
+              {flash ? <p className="flash" role="status">{flash}</p> : null}
             </section>
           ) : null}
 

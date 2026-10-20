@@ -68,9 +68,14 @@ let bridgeTimer: ReturnType<typeof setInterval> | null = null;
 let pollIntervalMs = loadSettings().pollIntervalMs || 1000;
 let historyWriteCounter = 0;
 let lastError: string | null = null;
+/** Wall-clock of last successfully parsed poll (connected or honest offline). */
+let lastSuccessfulPollAt: number | null = null;
 
 function emit(next: UpsSnapshot | null) {
   latest = next;
+  if (next) {
+    lastSuccessfulPollAt = Date.now();
+  }
   if (next?.connected) {
     historyWriteCounter += 1;
     if (historyWriteCounter % 5 === 0) {
@@ -107,10 +112,61 @@ function offlineFromBridge(reason: string): UpsSnapshot {
   };
 }
 
+const BRIDGE_BASE = HID_BRIDGE_URL.replace(/\/snapshot$/, "");
+
+async function tryAlternateProtocol(settings: AppSettings): Promise<UpsSnapshot | null> {
+  if (settings.snmpEnabled && settings.snmpHost) {
+    try {
+      const res = await fetch(`${BRIDGE_BASE}/protocol/snmp`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          host: settings.snmpHost,
+          community: settings.snmpCommunity || "public",
+        }),
+      });
+      const body = (await res.json()) as { ok?: boolean; snapshot?: unknown; message?: string };
+      if (body.ok && body.snapshot) {
+        const parsed = parseSnapshot(body.snapshot);
+        if (parsed?.connected) return parsed;
+      }
+    } catch {
+      /* fall through */
+    }
+  }
+  if (settings.nutEnabled && settings.nutHost) {
+    try {
+      const res = await fetch(`${BRIDGE_BASE}/protocol/nut`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          host: settings.nutHost,
+          upsName: settings.nutUpsName || "ups",
+        }),
+      });
+      const body = (await res.json()) as { ok?: boolean; snapshot?: unknown };
+      if (body.ok && body.snapshot) {
+        const parsed = parseSnapshot(body.snapshot);
+        if (parsed?.connected) return parsed;
+      }
+    } catch {
+      /* fall through */
+    }
+  }
+  return null;
+}
+
 async function pollHidBridge() {
+  const settings = loadSettings();
   try {
     const res = await fetch(HID_BRIDGE_URL, { cache: "no-store" });
     if (!res.ok) {
+      const alt = await tryAlternateProtocol(settings);
+      if (alt) {
+        lastError = null;
+        emit(alt);
+        return;
+      }
       emit(offlineFromBridge(`HID bridge HTTP ${res.status}`));
       return;
     }
@@ -120,17 +176,56 @@ async function pollHidBridge() {
       emit(offlineFromBridge("HID bridge returned invalid snapshot"));
       return;
     }
-    if (!parsed.connected && isRecord(raw) && typeof raw.error === "string") {
-      lastError = raw.error;
+    if (!parsed.connected) {
+      if (isRecord(raw) && typeof raw.error === "string") {
+        lastError = raw.error;
+      }
+      const alt = await tryAlternateProtocol(settings);
+      if (alt) {
+        lastError = null;
+        emit(alt);
+        return;
+      }
+    } else {
+      lastError = null;
     }
     emit(parsed);
   } catch {
+    const alt = await tryAlternateProtocol(settings);
+    if (alt) {
+      lastError = null;
+      emit(alt);
+      return;
+    }
     emit(
       offlineFromBridge(
         "HID bridge unreachable — run `npm run hid` (real USB UPS reader)",
       ),
     );
   }
+}
+
+/** Manual SNMP/NUT probe from Settings. */
+export async function probeAlternateProtocols(settings: AppSettings): Promise<{
+  ok: boolean;
+  message: string;
+}> {
+  if (!settings.snmpEnabled && !settings.nutEnabled) {
+    return { ok: false, message: "Enable SNMP or NUT in Settings first" };
+  }
+  const snap = await tryAlternateProtocol(settings);
+  if (!snap) {
+    return {
+      ok: false,
+      message: "SNMP/NUT probe failed — check host credentials and that the bridge is running",
+    };
+  }
+  lastError = null;
+  emit(snap);
+  return {
+    ok: true,
+    message: `Probe OK via alternate protocol (${snap.mode}, load ${snap.loadPercent}%)`,
+  };
 }
 
 function restartBridgePoller() {
@@ -175,6 +270,10 @@ export function getUpsLinkError(): string | null {
   return lastError;
 }
 
+export function getLastSuccessfulPollAt(): number | null {
+  return lastSuccessfulPollAt;
+}
+
 export function subscribeUps(cb: UpsListener): () => void {
   listeners.add(cb);
   cb(latest);
@@ -202,6 +301,7 @@ export function __resetUpsStoreForTests() {
   historyWriteCounter = 0;
   pollIntervalMs = 1000;
   lastError = null;
+  lastSuccessfulPollAt = null;
 }
 
 export { UPS_SNAPSHOT_EVENT };

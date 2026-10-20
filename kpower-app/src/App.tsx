@@ -1,8 +1,11 @@
 import { lazy, Suspense, useEffect, useState } from "react";
 import { AppNav, type AppRoute } from "./components/AppNav";
 import { StatusBar } from "./components/StatusBar";
-import { loadAlarms, saveAlarms, syncAlarmsFromSnapshot } from "./lib/appData";
-import { subscribeUps } from "./lib/upsStore";
+import { evaluateAlarms } from "./lib/alarmEngine";
+import { loadAlarms, loadSettings, saveAlarms } from "./lib/appData";
+import { maybeNotifyNewAlarms } from "./lib/notifications";
+import { tickSchedules } from "./lib/scheduleRunner";
+import { getLastSuccessfulPollAt, getUpsLinkError, subscribeUps } from "./lib/upsStore";
 import type { UpsSnapshot } from "./lib/types";
 import "./styles/app.css";
 
@@ -58,9 +61,29 @@ export default function App() {
   useEffect(() => subscribeUps(setSnapshot), []);
 
   useEffect(() => {
-    const next = syncAlarmsFromSnapshot(loadAlarms(), snapshot);
+    const prev = loadAlarms();
+    const next = evaluateAlarms(
+      prev,
+      snapshot,
+      loadSettings(),
+      getLastSuccessfulPollAt(),
+      getUpsLinkError(),
+    );
     saveAlarms(next);
+    const active = next.filter((a) => a.active);
+    void maybeNotifyNewAlarms(
+      active.map((a) => a.code),
+      active.map((a) => ({ code: a.code, message: a.message, severity: a.severity })),
+    );
   }, [snapshot]);
+
+  useEffect(() => {
+    const id = setInterval(() => {
+      void tickSchedules();
+    }, 15_000);
+    void tickSchedules();
+    return () => clearInterval(id);
+  }, []);
 
   return (
     <div className="app-shell">

@@ -14,7 +14,14 @@ import { PowerTopology } from "../components/PowerTopology";
 import { VoltageChart, type VoltagePoint } from "../components/VoltageChart";
 import { formatRuntime } from "../lib/healthScore";
 import { loadSettings } from "../lib/appData";
+import {
+  DEFAULT_DEVICE,
+  deriveMonitoringStatus,
+  formatLastUpdate,
+  loadDevices,
+} from "../lib/monitoring";
 import type { UpsSnapshot } from "../lib/types";
+import { getLastSuccessfulPollAt, getUpsLinkError } from "../lib/upsStore";
 
 const MAX_POINTS = 60;
 
@@ -56,6 +63,12 @@ export function DevicePage({ snapshot }: { snapshot: UpsSnapshot | null }) {
   const connected = Boolean(snapshot?.connected);
   const onBattery = connected && snapshot?.mode === "battery";
   const fault = connected && snapshot?.mode === "fault";
+  const device = loadDevices()[0] ?? DEFAULT_DEVICE;
+  const mon = deriveMonitoringStatus(
+    snapshot,
+    getLastSuccessfulPollAt(),
+    getUpsLinkError(),
+  );
 
   const shutdownCountdown =
     connected && onBattery && settings.powerControlEnabled
@@ -106,12 +119,12 @@ export function DevicePage({ snapshot }: { snapshot: UpsSnapshot | null }) {
           <div className={`device-ups-glyph ${connected ? "is-live" : ""}`} aria-hidden />
           <div>
             <strong className={connected ? "is-ok-text" : "text-danger"}>
-              {connected ? "UPS connected" : "UPS disconnected"}
+              {device.name} · {mon.comms === "live" ? "Live" : mon.comms === "stale" ? "Stale" : "Offline"}
             </strong>
             <p className="muted tiny">
               {connected
-                ? `Work status: ${onBattery ? "On battery" : "On mains"} · Runtime ${formatRuntime(snapshot!.runtimeSeconds)}`
-                : "Attach the UPS or close stock KPower if it holds the USB device."}
+                ? `${mon.message} · Mode ${snapshot!.mode} · Runtime ${formatRuntime(snapshot!.runtimeSeconds)} · Updated ${formatLastUpdate(mon.lastUpdateMs)}`
+                : mon.message}
             </p>
           </div>
         </div>
