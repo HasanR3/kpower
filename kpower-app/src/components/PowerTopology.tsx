@@ -12,11 +12,6 @@ function chevronRight(x: number, y: number): string {
   return `${x + 9},${y} ${x},${y - 5.5} ${x},${y + 5.5}`;
 }
 
-/** Tip points left — rare reverse on AC rails */
-function chevronLeft(x: number, y: number): string {
-  return `${x},${y} ${x + 9},${y - 5.5} ${x + 9},${y + 5.5}`;
-}
-
 /** Tip points up — Battery → UPS (discharge) */
 function chevronUp(cx: number, y: number): string {
   return `${cx},${y - 7} ${cx - 5.5},${y + 3} ${cx + 5.5},${y + 3}`;
@@ -182,19 +177,11 @@ export function PowerTopology({ snapshot }: { snapshot: UpsSnapshot | null }) {
             d={`M ${upsCx} ${railVertTop} V ${railVertBot}`}
           />
 
-          {/* Utility → UPS (right) or reverse (left) */}
-          <g
-            className={`topo-flow ${
-              flow.utilityToUps === "forward" || flow.utilityToUps === "reverse"
-                ? "topo-flow--on"
-                : ""
-            }`}
-          >
+          {/* Utility → UPS (always right when live) */}
+          <g className={`topo-flow ${flow.utilityToUps === "forward" ? "topo-flow--on" : ""}`}>
             {RAIL_T.map((t) => {
               const x = railLeft + (railLeftEnd - railLeft) * t;
-              const points =
-                flow.utilityToUps === "reverse" ? chevronLeft(x, midY) : chevronRight(x, midY);
-              return <polygon key={`u-${t}`} points={points} />;
+              return <polygon key={`u-${t}`} points={chevronRight(x, midY)} />;
             })}
           </g>
 
