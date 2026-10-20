@@ -5,3 +5,6 @@ target/
 *.log
 .DS_Store
 kpower-app/src-tauri/target/
+
+*.exe
+!kpower-app/**/*.exe
