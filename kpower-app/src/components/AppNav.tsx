@@ -1,4 +1,5 @@
 export type AppRoute =
+  | "overview"
   | "device"
   | "alarms"
   | "schedule"
@@ -7,6 +8,7 @@ export type AppRoute =
   | "settings";
 
 const ITEMS: { id: AppRoute; label: string }[] = [
+  { id: "overview", label: "Overview" },
   { id: "device", label: "Device" },
   { id: "alarms", label: "Alarms" },
   { id: "schedule", label: "Schedule" },
