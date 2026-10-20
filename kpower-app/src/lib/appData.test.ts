@@ -7,13 +7,14 @@ import {
 } from "./appData";
 
 describe("appData", () => {
-  it("marks upsOff as destructive", () => {
-    expect(isDestructive("upsOff")).toBe(true);
-    expect(isDestructive("selfTest")).toBe(false);
+  it("marks close output and EOD self-test as destructive", () => {
+    expect(isDestructive("closeOutputMinutes")).toBe(true);
+    expect(isDestructive("selfTestEod")).toBe(true);
+    expect(isDestructive("selfTest10s")).toBe(false);
   });
 
-  it("rejects non-on commands when disconnected", () => {
-    const result = runSimulatedCommand("selfTest", false);
+  it("rejects commands when disconnected", () => {
+    const result = runSimulatedCommand("selfTest10s", false);
     expect(result.ok).toBe(false);
     expect(result.message).toMatch(/not connected/i);
   });

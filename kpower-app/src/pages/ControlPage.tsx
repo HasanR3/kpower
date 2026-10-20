@@ -1,13 +1,5 @@
 import { useState } from "react";
-import {
-  AlertTriangle,
-  CheckCircle2,
-  Power,
-  Send,
-  Volume2,
-  VolumeX,
-  Zap,
-} from "lucide-react";
+import { CheckCircle2, Send, Zap } from "lucide-react";
 import { PageHero } from "../components/PageHero";
 import {
   controlCommandLabel,
@@ -20,41 +12,63 @@ import {
 } from "../lib/appData";
 import type { UpsSnapshot } from "../lib/types";
 
-const COMMANDS: {
+type ControlOption = {
   id: ControlCommand;
-  description: string;
-  Icon: typeof Zap;
-}[] = [
-  { id: "selfTest", description: "Run an immediate UPS self-test sequence", Icon: Zap },
-  { id: "buzzerOn", description: "Enable audible alarm buzzer", Icon: Volume2 },
-  { id: "buzzerOff", description: "Mute audible alarm buzzer", Icon: VolumeX },
-  { id: "upsOn", description: "Request UPS output power on", Icon: Power },
-  { id: "upsOff", description: "Request UPS output power off — load may drop", Icon: AlertTriangle },
+  needsMinutes?: { min: number; max: number; defaultValue: number; unitLabel: string };
+};
+
+const OPTIONS: ControlOption[] = [
+  { id: "selfTest10s" },
+  { id: "selfTestEod" },
+  {
+    id: "selfTestMinutes",
+    needsMinutes: { min: 1, max: 99, defaultValue: 10, unitLabel: "minute(s)" },
+  },
+  { id: "selfTestCancel" },
+  {
+    id: "closeOutputMinutes",
+    needsMinutes: { min: 0, max: 9, defaultValue: 1, unitLabel: "minute(s)" },
+  },
+  { id: "closeOutputCancel" },
+  { id: "buzzerToggle" },
 ];
 
 export function ControlPage({ snapshot }: { snapshot: UpsSnapshot | null }) {
-  const [selected, setSelected] = useState<ControlCommand>("selfTest");
+  const [selected, setSelected] = useState<ControlCommand>("selfTest10s");
+  const [selfTestMinutes, setSelfTestMinutes] = useState(10);
+  const [closeOutputMinutes, setCloseOutputMinutes] = useState(1);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [results, setResults] = useState<CommandResult[]>(() => loadCommandResults());
   const [flash, setFlash] = useState<string | null>(null);
 
   const connected = Boolean(snapshot?.connected);
-  const successCount = results.filter((r) => r.ok).length;
-  const failCount = results.filter((r) => !r.ok).length;
-
   const persist = (next: CommandResult[]) => {
     setResults(next);
     saveCommandResults(next);
   };
 
+  const detailFor = (cmd: ControlCommand): string | undefined => {
+    if (cmd === "selfTestMinutes") return `${selfTestMinutes} minute(s)`;
+    if (cmd === "closeOutputMinutes") return `${closeOutputMinutes} minute(s)`;
+    return undefined;
+  };
+
   const send = (cmd: ControlCommand) => {
-    const result = runSimulatedCommand(cmd, connected);
+    const result = runSimulatedCommand(cmd, connected, detailFor(cmd));
     persist([result, ...results].slice(0, 200));
     setFlash(result.message);
     setConfirmOpen(false);
   };
 
-  const onSubmit = () => {
+  const onSure = () => {
+    if (selected === "selfTestMinutes") {
+      const n = Math.min(99, Math.max(1, selfTestMinutes));
+      setSelfTestMinutes(n);
+    }
+    if (selected === "closeOutputMinutes") {
+      const n = Math.min(9, Math.max(0, closeOutputMinutes));
+      setCloseOutputMinutes(n);
+    }
     if (isDestructive(selected)) {
       setConfirmOpen(true);
       return;
@@ -67,67 +81,91 @@ export function ControlPage({ snapshot }: { snapshot: UpsSnapshot | null }) {
       <PageHero
         Icon={Zap}
         kicker="Operations"
-        title="Control"
-        subtitle="Issue UPS commands with confirmation on destructive actions"
+        title="UPS Control"
+        subtitle="Self-test, output close, and buzzer commands matching stock KPower"
       />
 
-      <div className="stat-strip">
+      <div className="stat-strip stat-strip--four">
         <article className="stat-chip">
           <span className="stat-chip__label">Link</span>
           <strong className={connected ? "is-ok-text" : "text-danger"}>
-            {connected ? "Online" : "Offline"}
+            {connected ? "Connected" : "Disconnected"}
           </strong>
         </article>
         <article className="stat-chip">
+          <span className="stat-chip__label">Selected</span>
+          <strong className="stat-chip__text">{controlCommandLabel(selected)}</strong>
+        </article>
+        <article className="stat-chip">
           <span className="stat-chip__label">Succeeded</span>
-          <strong>{successCount}</strong>
+          <strong>{results.filter((r) => r.ok).length}</strong>
         </article>
         <article className="stat-chip">
           <span className="stat-chip__label">Failed</span>
-          <strong className={failCount ? "text-danger" : ""}>{failCount}</strong>
+          <strong className={results.some((r) => !r.ok) ? "text-danger" : ""}>
+            {results.filter((r) => !r.ok).length}
+          </strong>
         </article>
       </div>
 
       {!connected ? (
         <p className="banner banner--warn">
-          UPS not connected — most commands will fail until the device is online again.
+          UPS not connected — commands will fail until the device is online.
         </p>
       ) : null}
 
       <div className="enterprise-grid">
         <section className="panel">
           <div className="panel__head">
-            <h2>
-              <Send aria-hidden size={16} strokeWidth={2} /> Command palette
-            </h2>
+            <h2>UPS Control</h2>
           </div>
-          <div className="command-grid">
-            {COMMANDS.map(({ id, description, Icon }) => (
+          <div className="control-options">
+            {OPTIONS.map((opt) => (
               <label
-                key={id}
-                className={selected === id ? "command-card command-card--active" : "command-card"}
+                key={opt.id}
+                className={selected === opt.id ? "control-option control-option--active" : "control-option"}
               >
                 <input
                   type="radio"
-                  name="ups-cmd"
-                  checked={selected === id}
-                  onChange={() => setSelected(id)}
+                  name="ups-control"
+                  checked={selected === opt.id}
+                  onChange={() => setSelected(opt.id)}
                 />
-                <Icon aria-hidden size={18} strokeWidth={2} />
-                <div>
-                  <strong>
-                    {controlCommandLabel(id)}
-                    {isDestructive(id) ? " · destructive" : ""}
-                  </strong>
-                  <p>{description}</p>
-                </div>
+                <span className="control-option__body">
+                  <strong>{controlCommandLabel(opt.id)}</strong>
+                  {opt.needsMinutes ? (
+                    <span className="control-option__param">
+                      Duration ({opt.needsMinutes.min} to {opt.needsMinutes.max}){" "}
+                      <input
+                        type="number"
+                        min={opt.needsMinutes.min}
+                        max={opt.needsMinutes.max}
+                        value={
+                          opt.id === "selfTestMinutes" ? selfTestMinutes : closeOutputMinutes
+                        }
+                        onChange={(e) => {
+                          const n = Number(e.target.value);
+                          if (opt.id === "selfTestMinutes") setSelfTestMinutes(n);
+                          else setCloseOutputMinutes(n);
+                        }}
+                        onClick={(e) => e.stopPropagation()}
+                        aria-label={
+                          opt.id === "selfTestMinutes"
+                            ? "Self-test duration in minutes"
+                            : "Close output delay in minutes"
+                        }
+                      />{" "}
+                      {opt.needsMinutes.unitLabel}
+                    </span>
+                  ) : null}
+                </span>
               </label>
             ))}
           </div>
-          <div className="row-actions" style={{ marginTop: "1rem" }}>
-            <button type="button" className="btn btn--primary" onClick={onSubmit}>
+          <div className="row-actions" style={{ marginTop: "1.1rem", justifyContent: "center" }}>
+            <button type="button" className="btn btn--primary btn--wide" onClick={onSure}>
               <Send aria-hidden size={15} strokeWidth={2} />
-              Send command
+              Sure
             </button>
             {flash ? <p className="flash">{flash}</p> : null}
           </div>
@@ -138,7 +176,6 @@ export function ControlPage({ snapshot }: { snapshot: UpsSnapshot | null }) {
             <h2>
               <CheckCircle2 aria-hidden size={16} strokeWidth={2} /> Recent results
             </h2>
-            <span className="panel__tag">{results.length} logged</span>
           </div>
           {results.length === 0 ? (
             <p className="panel__empty">No commands sent yet.</p>
@@ -164,14 +201,18 @@ export function ControlPage({ snapshot }: { snapshot: UpsSnapshot | null }) {
       {confirmOpen ? (
         <div className="modal-backdrop" role="presentation">
           <div className="modal" role="dialog" aria-labelledby="confirm-title">
-            <h2 id="confirm-title">Confirm UPS power off</h2>
-            <p>This will request a UPS power-off. Connected loads may lose power.</p>
+            <h2 id="confirm-title">Confirm {controlCommandLabel(selected)}</h2>
+            <p>
+              {selected === "closeOutputMinutes"
+                ? `UPS output will close in ${closeOutputMinutes} minute(s). Protected loads may lose power.`
+                : "Self-test to end of discharge can deeply discharge the battery."}
+            </p>
             <div className="row-actions">
               <button type="button" className="btn btn--secondary" onClick={() => setConfirmOpen(false)}>
                 Cancel
               </button>
-              <button type="button" className="btn btn--danger" onClick={() => send("upsOff")}>
-                Power off UPS
+              <button type="button" className="btn btn--danger" onClick={() => send(selected)}>
+                Confirm
               </button>
             </div>
           </div>

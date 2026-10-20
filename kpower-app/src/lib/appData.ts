@@ -19,17 +19,19 @@ export interface ScheduleItem {
   id: string;
   label: string;
   action: ScheduleAction;
-  /** Local datetime-local value */
   runAt: string;
   enabled: boolean;
 }
 
+/** Stock KPower UPS Control commands */
 export type ControlCommand =
-  | "selfTest"
-  | "buzzerOn"
-  | "buzzerOff"
-  | "upsOn"
-  | "upsOff";
+  | "selfTest10s"
+  | "selfTestEod"
+  | "selfTestMinutes"
+  | "selfTestCancel"
+  | "closeOutputMinutes"
+  | "closeOutputCancel"
+  | "buzzerToggle";
 
 export interface CommandResult {
   id: string;
@@ -37,6 +39,7 @@ export interface CommandResult {
   ok: boolean;
   message: string;
   at: number;
+  detail?: string;
 }
 
 export interface HistorySample {
@@ -53,14 +56,42 @@ export interface AppSettings {
   pollIntervalMs: number;
   language: "en" | "ar";
   commsType: "usb" | "serial";
-  shutdownBatteryPercent: number;
-  shutdownRuntimeSeconds: number;
   startWithWindows: boolean;
   minimizeToTray: boolean;
   simulateAlarms: boolean;
+
+  /** Email notification settings (stock Common Parameters → E-Mail) */
+  emailEnabled: boolean;
+  emailSmtpHost: string;
+  emailSmtpPort: number;
+  emailUsername: string;
+  emailPassword: string;
+  emailFrom: string;
+  emailTo: string;
+  emailOnAlarm: boolean;
+  emailOnPowerFail: boolean;
+  emailOnLowBattery: boolean;
+
+  /** Stock Shutdown → KPower power control */
+  powerControlEnabled: boolean;
+  shutdownMinutesAfterAcFault: number;
+  shutdownMinutesOnLowBattery: number;
+  shutdownBatteryPercentAfterAcFault: number;
+  shutdownOs: boolean;
+  commandFileEnabled: boolean;
+  commandFilePath: string;
+  commandMaxExecutionMinutes: number;
+
+  /** Stock Shutdown → UPS Power Off */
+  upsPowerOffEnabled: boolean;
+  upsPowerOffDelayMinutes: number;
+
+  /** Legacy aliases used by Overview health score */
+  shutdownBatteryPercent: number;
+  shutdownRuntimeSeconds: number;
 }
 
-const SETTINGS_KEY = "kpower.settings.v1";
+const SETTINGS_KEY = "kpower.settings.v2";
 const SCHEDULES_KEY = "kpower.schedules.v1";
 const ALARMS_KEY = "kpower.alarms.v1";
 const HISTORY_KEY = "kpower.history.v1";
@@ -70,11 +101,35 @@ export const DEFAULT_SETTINGS: AppSettings = {
   pollIntervalMs: 1000,
   language: "en",
   commsType: "usb",
-  shutdownBatteryPercent: 15,
-  shutdownRuntimeSeconds: 300,
   startWithWindows: false,
   minimizeToTray: true,
   simulateAlarms: true,
+
+  emailEnabled: false,
+  emailSmtpHost: "",
+  emailSmtpPort: 587,
+  emailUsername: "",
+  emailPassword: "",
+  emailFrom: "",
+  emailTo: "",
+  emailOnAlarm: true,
+  emailOnPowerFail: true,
+  emailOnLowBattery: true,
+
+  powerControlEnabled: true,
+  shutdownMinutesAfterAcFault: 0,
+  shutdownMinutesOnLowBattery: 3,
+  shutdownBatteryPercentAfterAcFault: 1,
+  shutdownOs: true,
+  commandFileEnabled: false,
+  commandFilePath: "",
+  commandMaxExecutionMinutes: 1,
+
+  upsPowerOffEnabled: false,
+  upsPowerOffDelayMinutes: 1,
+
+  shutdownBatteryPercent: 15,
+  shutdownRuntimeSeconds: 300,
 };
 
 function loadJson<T>(key: string, fallback: T): T {
@@ -92,7 +147,9 @@ function saveJson(key: string, value: unknown) {
 }
 
 export function loadSettings(): AppSettings {
-  return { ...DEFAULT_SETTINGS, ...loadJson(SETTINGS_KEY, {}) };
+  const legacy = loadJson<Partial<AppSettings>>("kpower.settings.v1", {});
+  const current = loadJson<Partial<AppSettings>>(SETTINGS_KEY, {});
+  return { ...DEFAULT_SETTINGS, ...legacy, ...current };
 }
 
 export function saveSettings(settings: AppSettings) {
@@ -198,52 +255,61 @@ export function scheduleActionLabel(action: ScheduleAction): string {
     case "buzzerMute":
       return "Mute buzzer";
     case "shutdownOs":
-      return "Shutdown OS";
+      return "Shutdown operating system";
     case "upsOff":
       return "UPS power off";
   }
 }
 
-export function controlCommandLabel(cmd: ControlCommand): string {
+export function controlCommandLabel(cmd: ControlCommand | string): string {
   switch (cmd) {
-    case "selfTest":
-      return "Self-test";
-    case "buzzerOn":
-      return "Buzzer on";
-    case "buzzerOff":
-      return "Buzzer off";
-    case "upsOn":
-      return "UPS power on";
-    case "upsOff":
-      return "UPS power off";
+    case "selfTest10s":
+      return "UPS self-test for 10 seconds";
+    case "selfTestEod":
+      return "UPS self-test to end of discharge";
+    case "selfTestMinutes":
+      return "UPS self-test for custom duration";
+    case "selfTestCancel":
+      return "Cancel UPS self-test";
+    case "closeOutputMinutes":
+      return "Close UPS output after delay";
+    case "closeOutputCancel":
+      return "Cancel close UPS output";
+    case "buzzerToggle":
+      return "UPS buzzer toggle";
+    default:
+      return String(cmd);
   }
 }
 
 export function isDestructive(cmd: ControlCommand): boolean {
-  return cmd === "upsOff";
+  return cmd === "closeOutputMinutes" || cmd === "selfTestEod";
 }
 
-/** Simulated command path until HID is wired. */
 export function runSimulatedCommand(
   cmd: ControlCommand,
   connected: boolean,
+  detail?: string,
 ): CommandResult {
   const id = `cmd-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-  if (!connected && cmd !== "upsOn") {
+  const label = controlCommandLabel(cmd);
+  if (!connected) {
     return {
       id,
       command: cmd,
       ok: false,
-      message: `${controlCommandLabel(cmd)} failed: UPS not connected`,
+      message: `${label} failed: UPS not connected`,
       at: Date.now(),
+      detail,
     };
   }
   return {
     id,
     command: cmd,
     ok: true,
-    message: `${controlCommandLabel(cmd)} sent (simulator)`,
+    message: detail ? `${label} sent (${detail}) · simulator` : `${label} sent (simulator)`,
     at: Date.now(),
+    detail,
   };
 }
 
