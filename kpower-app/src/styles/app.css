@@ -1653,18 +1653,20 @@ body {
 
 .topology-stage {
   background:
-    radial-gradient(ellipse at 50% 30%, #f4f8ff 0%, transparent 55%),
+    radial-gradient(ellipse at 50% 28%, #f4f8ff 0%, transparent 52%),
     linear-gradient(180deg, #fbfcfe 0%, #f3f6fa 100%);
   border: 1px solid var(--border);
   border-radius: 12px;
   overflow: hidden;
+  padding: 0.35rem 0.5rem 0.15rem;
 }
 
 .topology-svg {
   display: block;
   width: 100%;
   height: auto;
-  max-height: 380px;
+  max-height: 320px;
+  margin: 0 auto;
 }
 
 .topo-rail {
@@ -1774,12 +1776,16 @@ body {
 .topo-value {
   fill: #5a6a7c;
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 500;
 }
 
 .topo-value--sm {
-  font-size: 11px;
+  font-size: 10.5px;
+}
+
+.topo-label {
+  font-size: 12.5px;
 }
 
 .topo-cell {

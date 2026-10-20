@@ -7,6 +7,15 @@ function fmt(n: number, digits = 0): string {
   return Number.isFinite(n) ? n.toFixed(digits) : "—";
 }
 
+/** Balanced topology geometry (viewBox 800×340) */
+const GEO = {
+  midY: 118,
+  util: { x: 36, y: 48, w: 148, h: 140 },
+  ups: { x: 268, y: 36, w: 184, h: 164 },
+  load: { x: 536, y: 48, w: 148, h: 140 },
+  bat: { x: 290, y: 236, w: 140, h: 86 },
+} as const;
+
 export function PowerTopology({ snapshot }: { snapshot: UpsSnapshot | null }) {
   const connected = Boolean(snapshot?.connected);
   const onBattery = connected && snapshot?.mode === "battery";
@@ -37,6 +46,16 @@ export function PowerTopology({ snapshot }: { snapshot: UpsSnapshot | null }) {
           ? "Bypass path active"
           : "Utility feeding UPS — battery on reserve";
 
+  const { midY, util, ups, load, bat } = GEO;
+  const utilCx = util.x + util.w / 2;
+  const upsCx = ups.x + ups.w / 2;
+  const loadCx = load.x + load.w / 2;
+  const railLeft = util.x + util.w + 6;
+  const railRightStart = ups.x + ups.w + 6;
+  const railRightEnd = load.x - 6;
+  const railVertTop = ups.y + ups.h + 4;
+  const railVertBot = bat.y - 4;
+
   return (
     <section className="topology panel" aria-label="Power topology">
       <div className="panel__head">
@@ -47,7 +66,7 @@ export function PowerTopology({ snapshot }: { snapshot: UpsSnapshot | null }) {
       <div className="topology-stage">
         <svg
           className="topology-svg"
-          viewBox="0 0 920 420"
+          viewBox="0 0 720 340"
           role="img"
           aria-label="Utility to UPS to load with battery branch"
         >
@@ -66,40 +85,46 @@ export function PowerTopology({ snapshot }: { snapshot: UpsSnapshot | null }) {
               <stop offset="0%" stopColor="#fbbf24" />
               <stop offset="100%" stopColor="#a16207" />
             </linearGradient>
-            <filter id="topoSoft" x="-20%" y="-20%" width="140%" height="140%">
-              <feDropShadow dx="0" dy="4" stdDeviation="6" floodColor="#0f1724" floodOpacity="0.08" />
+            <filter id="topoSoft" x="-10%" y="-10%" width="120%" height="120%">
+              <feDropShadow dx="0" dy="2" stdDeviation="3" floodColor="#0f1724" floodOpacity="0.07" />
             </filter>
           </defs>
 
-          {/* Rails */}
+          {/* Horizontal rails — equal gaps */}
           <path
             className={`topo-rail ${utilityToUps !== "idle" ? "topo-rail--live" : ""}`}
-            d="M 150 150 H 360"
+            d={`M ${railLeft} ${midY} H ${ups.x - 6}`}
           />
           <path
             className={`topo-rail ${upsToLoad !== "idle" ? "topo-rail--live" : ""}`}
-            d="M 560 150 H 770"
+            d={`M ${railRightStart} ${midY} H ${railRightEnd}`}
           />
           <path
-            className={`topo-rail topo-rail--vert ${upsToBattery !== "idle" ? (upsToBattery === "reverse" ? "topo-rail--warn" : "topo-rail--live") : ""}`}
-            d="M 460 230 V 310"
+            className={`topo-rail topo-rail--vert ${
+              upsToBattery !== "idle"
+                ? upsToBattery === "reverse"
+                  ? "topo-rail--warn"
+                  : "topo-rail--live"
+                : ""
+            }`}
+            d={`M ${upsCx} ${railVertTop} V ${railVertBot}`}
           />
 
-          {/* Flow chevrons */}
+          {/* Evenly spaced chevrons on left rail */}
           <g className={`topo-flow ${utilityToUps === "forward" ? "topo-flow--on" : ""}`}>
-            <polygon points="210,150 222,143 222,157" />
-            <polygon points="250,150 262,143 262,157" />
-            <polygon points="290,150 302,143 302,157" />
-            <polygon points="330,150 342,143 342,157" />
+            {[0.22, 0.42, 0.62, 0.82].map((t) => {
+              const x = railLeft + (ups.x - 6 - railLeft) * t;
+              return <polygon key={t} points={`${x},${midY} ${x + 10},${midY - 6} ${x + 10},${midY + 6}`} />;
+            })}
           </g>
           <g className={`topo-flow ${upsToLoad === "forward" ? "topo-flow--on" : ""}`}>
-            <polygon points="620,150 632,143 632,157" />
-            <polygon points="660,150 672,143 672,157" />
-            <polygon points="700,150 712,143 712,157" />
-            <polygon points="740,150 752,143 752,157" />
+            {[0.22, 0.42, 0.62, 0.82].map((t) => {
+              const x = railRightStart + (railRightEnd - railRightStart) * t;
+              return <polygon key={t} points={`${x},${midY} ${x + 10},${midY - 6} ${x + 10},${midY + 6}`} />;
+            })}
           </g>
           <g
-            className={`topo-flow topo-flow--down ${
+            className={`topo-flow ${
               upsToBattery === "forward"
                 ? "topo-flow--on"
                 : upsToBattery === "reverse"
@@ -107,86 +132,93 @@ export function PowerTopology({ snapshot }: { snapshot: UpsSnapshot | null }) {
                   : ""
             }`}
           >
-            <polygon points="460,250 453,262 467,262" />
-            <polygon points="460,275 453,287 467,287" />
+            {[0.35, 0.65].map((t) => {
+              const y = railVertTop + (railVertBot - railVertTop) * t;
+              const up = upsToBattery === "reverse";
+              return up ? (
+                <polygon key={t} points={`${upsCx},${y - 8} ${upsCx - 6},${y + 2} ${upsCx + 6},${y + 2}`} />
+              ) : (
+                <polygon key={t} points={`${upsCx},${y + 8} ${upsCx - 6},${y - 2} ${upsCx + 6},${y - 2}`} />
+              );
+            })}
           </g>
 
-          {/* Utility node */}
+          {/* Utility */}
           <g className={`topo-node ${utilityActive ? "topo-node--live" : ""}`} filter="url(#topoSoft)">
-            <rect x="40" y="70" width="140" height="160" rx="16" />
-            <g transform="translate(78,95)" fill="none" stroke="currentColor" strokeWidth="2.2">
-              <path d="M32 8 V28" />
-              <path d="M20 28 H44" />
-              <path d="M14 40 H50" />
-              <path d="M8 52 H56" />
-              <path d="M32 28 V70" />
-              <path d="M18 70 H46" />
+            <rect x={util.x} y={util.y} width={util.w} height={util.h} rx="14" />
+            <g transform={`translate(${utilCx - 24}, ${util.y + 22})`} fill="none" stroke="currentColor" strokeWidth="2.1">
+              <path d="M24 4 V20" />
+              <path d="M14 20 H34" />
+              <path d="M10 30 H38" />
+              <path d="M6 40 H42" />
+              <path d="M24 20 V54" />
+              <path d="M14 54 H34" />
             </g>
-            <text x="110" y="185" textAnchor="middle" className="topo-label">
+            <text x={utilCx} y={util.y + util.h - 36} textAnchor="middle" className="topo-label">
               Utility grid
             </text>
-            <text x="110" y="208" textAnchor="middle" className="topo-value">
-              {connected ? `${fmt(snapshot!.inputVoltage, 1)} V` : "—"}
+            <text x={utilCx} y={util.y + util.h - 16} textAnchor="middle" className="topo-value">
+              {connected ? `${fmt(snapshot!.inputVoltage, 1)} voltage in` : "—"}
             </text>
           </g>
 
-          {/* UPS node */}
-          <g className={`topo-node topo-node--core ${upsActive ? "topo-node--live" : fault ? "topo-node--fault" : ""}`} filter="url(#topoSoft)">
-            <rect x="360" y="55" width="200" height="175" rx="18" />
-            <rect x="390" y="78" width="140" height="28" rx="6" className="topo-screen" />
-            <text x="460" y="97" textAnchor="middle" className="topo-screen-text">
+          {/* UPS */}
+          <g
+            className={`topo-node topo-node--core ${upsActive ? "topo-node--live" : fault ? "topo-node--fault" : ""}`}
+            filter="url(#topoSoft)"
+          >
+            <rect x={ups.x} y={ups.y} width={ups.w} height={ups.h} rx="16" />
+            <rect x={ups.x + 28} y={ups.y + 18} width={ups.w - 56} height={24} rx="6" className="topo-screen" />
+            <text x={upsCx} y={ups.y + 35} textAnchor="middle" className="topo-screen-text">
               {connected ? snapshot!.mode.toUpperCase() : "OFFLINE"}
             </text>
-            <circle cx="460" cy="140" r="18" className="topo-badge" />
-            <path
-              d="M455 130 l6 10 h-4 l3 12 l-8-12 h4 z"
-              fill="#fff"
-            />
-            <text x="460" y="185" textAnchor="middle" className="topo-label">
+            <circle cx={upsCx} cy={ups.y + 78} r="16" className="topo-badge" />
+            <path d={`M${upsCx - 4} ${ups.y + 70} l5 8 h-3.5 l2.5 10 l-7-10 h3.5 z`} fill="#fff" />
+            <text x={upsCx} y={ups.y + ups.h - 36} textAnchor="middle" className="topo-label">
               UPS
             </text>
-            <text x="460" y="208" textAnchor="middle" className="topo-value">
-              {connected ? `${fmt(snapshot!.outputVoltage, 1)} V out` : "No link"}
+            <text x={upsCx} y={ups.y + ups.h - 16} textAnchor="middle" className="topo-value">
+              {connected ? `${fmt(snapshot!.outputVoltage, 1)} voltage out` : "No link"}
             </text>
           </g>
 
-          {/* Load node */}
+          {/* Load */}
           <g className={`topo-node ${loadActive ? "topo-node--live" : ""}`} filter="url(#topoSoft)">
-            <rect x="740" y="70" width="140" height="160" rx="16" />
-            <g transform="translate(778,98)" fill="none" stroke="currentColor" strokeWidth="2.2">
-              <path d="M12 58 V28 H52 V58" />
-              <path d="M8 58 H56" />
-              <path d="M22 38 h8 v8 h-8 z" />
-              <path d="M36 38 h8 v8 h-8 z" />
-              <path d="M28 18 l12-10 12 10" />
+            <rect x={load.x} y={load.y} width={load.w} height={load.h} rx="14" />
+            <g transform={`translate(${loadCx - 24}, ${load.y + 24})`} fill="none" stroke="currentColor" strokeWidth="2.1">
+              <path d="M10 48 V24 H38 V48" />
+              <path d="M6 48 H42" />
+              <path d="M16 32 h6 v6 h-6 z" />
+              <path d="M26 32 h6 v6 h-6 z" />
+              <path d="M20 16 l12-10 12 10" />
             </g>
-            <text x="810" y="185" textAnchor="middle" className="topo-label">
+            <text x={loadCx} y={load.y + load.h - 36} textAnchor="middle" className="topo-label">
               Protected load
             </text>
-            <text x="810" y="208" textAnchor="middle" className="topo-value">
-              {connected ? `${fmt(snapshot!.loadPercent, 0)}% load` : "—"}
+            <text x={loadCx} y={load.y + load.h - 16} textAnchor="middle" className="topo-value">
+              {connected ? `${fmt(snapshot!.loadPercent, 0)}% output load` : "—"}
             </text>
           </g>
 
-          {/* Battery node */}
+          {/* Battery */}
           <g
             className={`topo-node topo-node--battery ${
-              batteryActive ? "topo-node--warn" : batteryCharging ? "topo-node--live" : connected ? "" : ""
+              batteryActive ? "topo-node--warn" : batteryCharging ? "topo-node--live" : ""
             }`}
             filter="url(#topoSoft)"
           >
-            <rect x="380" y="310" width="160" height="90" rx="14" />
-            <g transform="translate(430,328)" fill="none" stroke="currentColor" strokeWidth="2.2">
-              <rect x="0" y="8" width="52" height="28" rx="4" />
-              <rect x="52" y="16" width="6" height="12" rx="1" />
-              <rect x="6" y="14" width="8" height="16" rx="1" className="topo-cell" />
-              <rect x="18" y="14" width="8" height="16" rx="1" className="topo-cell" />
-              <rect x="30" y="14" width="8" height="16" rx="1" className="topo-cell" />
+            <rect x={bat.x} y={bat.y} width={bat.w} height={bat.h} rx="12" />
+            <g transform={`translate(${upsCx - 26}, ${bat.y + 10})`} fill="none" stroke="currentColor" strokeWidth="2">
+              <rect x="0" y="4" width="44" height="22" rx="3" />
+              <rect x="44" y="10" width="5" height="10" rx="1" />
+              <rect x="5" y="9" width="7" height="12" rx="1" className="topo-cell" />
+              <rect x="15" y="9" width="7" height="12" rx="1" className="topo-cell" />
+              <rect x="25" y="9" width="7" height="12" rx="1" className="topo-cell" />
             </g>
-            <text x="460" y="372" textAnchor="middle" className="topo-label">
+            <text x={upsCx} y={bat.y + bat.h - 28} textAnchor="middle" className="topo-label">
               Battery bank
             </text>
-            <text x="460" y="390" textAnchor="middle" className="topo-value topo-value--sm">
+            <text x={upsCx} y={bat.y + bat.h - 10} textAnchor="middle" className="topo-value topo-value--sm">
               {connected
                 ? `${fmt(snapshot!.batteryPercent, 0)}% · ${formatRuntime(snapshot!.runtimeSeconds)}`
                 : "—"}
