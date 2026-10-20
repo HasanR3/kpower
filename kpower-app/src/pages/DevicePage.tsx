@@ -1,7 +1,16 @@
 import { useEffect, useState } from "react";
+import {
+  Activity,
+  BatteryMedium,
+  Gauge,
+  PlugZap,
+  Thermometer,
+  Zap,
+} from "lucide-react";
 import { MetricTile } from "../components/MetricTile";
 import { PowerFlowMimic } from "../components/PowerFlowMimic";
 import { VoltageChart, type VoltagePoint } from "../components/VoltageChart";
+import { formatRuntime } from "../lib/healthScore";
 import type { UpsSnapshot } from "../lib/types";
 
 const MAX_POINTS = 60;
@@ -31,24 +40,80 @@ export function DevicePage({ snapshot }: { snapshot: UpsSnapshot | null }) {
   if (!snapshot || !snapshot.connected) {
     return (
       <section className="page device-page">
-        <h1>Device</h1>
-        <p className="empty-state">UPS not connected</p>
-        <p className="muted">Reconnect the USB cable or close stock KPower if it holds the device.</p>
+        <header className="device-hero">
+          <div>
+            <p className="overview-kicker">Telemetry</p>
+            <h1>Device</h1>
+            <p className="overview-sub">Live electrical readings from the attached UPS</p>
+          </div>
+        </header>
+        <div className="device-empty">
+          <p className="empty-state">UPS not connected</p>
+          <p className="muted">
+            Reconnect the USB cable, or close stock KPower if it is holding the device exclusively.
+          </p>
+        </div>
       </section>
     );
   }
 
   return (
     <section className="page device-page">
-      <h1>Device</h1>
+      <header className="device-hero">
+        <div>
+          <p className="overview-kicker">Telemetry</p>
+          <h1>Device</h1>
+          <p className="overview-sub">
+            Operating on {snapshot.mode} · estimated runtime {formatRuntime(snapshot.runtimeSeconds)}
+          </p>
+        </div>
+      </header>
+
       <div className="metric-grid">
-        <MetricTile label="Load" value={fmt(snapshot.loadPercent, 0)} unit="%" />
-        <MetricTile label="Battery" value={fmt(snapshot.batteryPercent, 0)} unit="%" />
-        <MetricTile label="Vin" value={fmt(snapshot.inputVoltage, 1)} unit="V" />
-        <MetricTile label="Vout" value={fmt(snapshot.outputVoltage, 1)} unit="V" />
-        <MetricTile label="Frequency" value={fmt(snapshot.frequency, 1)} unit="Hz" />
-        <MetricTile label="Temp" value={fmt(snapshot.temperatureC, 1)} unit="°C" />
+        <MetricTile
+          Icon={Gauge}
+          label="Output load"
+          value={fmt(snapshot.loadPercent, 0)}
+          unit="%"
+          hint="Share of rated capacity"
+        />
+        <MetricTile
+          Icon={BatteryMedium}
+          label="Battery capacity"
+          value={fmt(snapshot.batteryPercent, 0)}
+          unit="%"
+          hint="Remaining charge"
+        />
+        <MetricTile
+          Icon={Zap}
+          label="Voltage in"
+          value={fmt(snapshot.inputVoltage, 1)}
+          unit="V"
+          hint="Utility / input"
+        />
+        <MetricTile
+          Icon={PlugZap}
+          label="Voltage out"
+          value={fmt(snapshot.outputVoltage, 1)}
+          unit="V"
+          hint="Protected output"
+        />
+        <MetricTile
+          Icon={Activity}
+          label="Frequency"
+          value={fmt(snapshot.frequency, 1)}
+          unit="Hz"
+          hint="Output line frequency"
+        />
+        <MetricTile
+          Icon={Thermometer}
+          label="Temperature"
+          value={fmt(snapshot.temperatureC, 1)}
+          unit="°C"
+          hint="Internal sensor"
+        />
       </div>
+
       <div className="device-panels">
         <PowerFlowMimic mode={snapshot.mode} connected={snapshot.connected} />
         <VoltageChart points={points} />
