@@ -12,7 +12,7 @@ import {
   controlCommandLabel,
   isDestructive,
   loadCommandResults,
-  runSimulatedCommand,
+  runControlCommand,
   saveCommandResults,
   type CommandResult,
   type ControlCommand,
@@ -111,7 +111,7 @@ export function ControlPage({ snapshot }: { snapshot: UpsSnapshot | null }) {
   };
 
   const send = (cmd: ControlCommand) => {
-    const result = runSimulatedCommand(cmd, connected, detailFor(cmd));
+    const result = runControlCommand(cmd, connected, detailFor(cmd));
     persist([result, ...results].slice(0, 200));
     setFlash(result.message);
     setConfirmOpen(false);
@@ -137,8 +137,13 @@ export function ControlPage({ snapshot }: { snapshot: UpsSnapshot | null }) {
         Icon={Zap}
         kicker="Operations"
         title="UPS Control"
-        subtitle="Issue self-test, output, and buzzer commands with confirmation on destructive actions"
+        subtitle="Self-test, output, and buzzer commands — HID write opcodes not mapped yet; failed attempts are logged honestly"
       />
+
+      <p className="banner banner--warn" role="status">
+        Control commands are prepared and audited locally, but are not written to the UPS until the
+        HID control report map ships. Do not rely on this screen for live protective actions.
+      </p>
 
       <div className="ops-bar" role="status">
         <div className="ops-bar__item">

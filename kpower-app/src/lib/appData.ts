@@ -103,7 +103,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   commsType: "usb",
   startWithWindows: false,
   minimizeToTray: true,
-  simulateAlarms: true,
+  simulateAlarms: false,
 
   emailEnabled: false,
   emailSmtpHost: "",
@@ -188,30 +188,75 @@ export function saveCommandResults(items: CommandResult[]) {
   saveJson(EVENTS_KEY, items.slice(-200));
 }
 
+/** Empty default — live UPS codes are synced via syncAlarmsFromSnapshot. */
 export function seedAlarms(): AlarmRecord[] {
+  return [];
+}
+
+const LIVE_ALARM_META: Record<
+  string,
+  { message: string; severity: AlarmSeverity }
+> = {
+  ON_BATTERY: {
+    message: "Utility input unavailable — UPS running on battery",
+    severity: "critical",
+  },
+  UPS_FAULT: {
+    message: "UPS reported a fault condition",
+    severity: "critical",
+  },
+  OVERLOAD: {
+    message: "Output load exceeded rated capacity",
+    severity: "critical",
+  },
+  BATTERY_LOW: {
+    message: "Battery capacity below warning threshold",
+    severity: "warning",
+  },
+};
+
+/**
+ * Keep AlarmRecord store aligned with live UPS alarm codes from HID telemetry.
+ * Does not invent demo alarms.
+ */
+export function syncAlarmsFromSnapshot(
+  existing: AlarmRecord[],
+  snapshot: UpsSnapshot | null,
+): AlarmRecord[] {
+  const codes = new Set(snapshot?.connected ? snapshot.alarmCodes : []);
   const now = Date.now();
-  return [
-    {
-      id: "a-demo-1",
-      code: "BATTERY_LOW",
-      message: "Battery capacity below warning threshold",
-      severity: "warning",
-      active: false,
-      acked: true,
-      createdAt: now - 86_400_000,
-      clearedAt: now - 85_000_000,
-    },
-    {
-      id: "a-demo-2",
-      code: "INPUT_FAIL",
-      message: "Utility input failed — running on battery",
-      severity: "critical",
-      active: false,
-      acked: true,
-      createdAt: now - 172_800_000,
-      clearedAt: now - 172_000_000,
-    },
-  ];
+  let next = existing.map((a) => {
+    if (!a.active) return a;
+    if (codes.has(a.code)) return a;
+    // Clear live-synced alarms that are no longer present
+    if (a.id.startsWith("live-")) {
+      return { ...a, active: false, clearedAt: now };
+    }
+    return a;
+  });
+
+  for (const code of codes) {
+    const open = next.find((a) => a.active && a.code === code);
+    if (open) continue;
+    const meta = LIVE_ALARM_META[code] ?? {
+      message: `UPS reported condition ${code}`,
+      severity: "warning" as AlarmSeverity,
+    };
+    next = [
+      {
+        id: `live-${code}`,
+        code,
+        message: meta.message,
+        severity: meta.severity,
+        active: true,
+        acked: false,
+        createdAt: now,
+      },
+      ...next,
+    ];
+  }
+
+  return next;
 }
 
 export function appendHistorySample(
@@ -286,7 +331,12 @@ export function isDestructive(cmd: ControlCommand): boolean {
   return cmd === "closeOutputMinutes" || cmd === "selfTestEod";
 }
 
-export function runSimulatedCommand(
+/**
+ * Attempt a UPS control command.
+ * HID feature-report writes for stock control opcodes are not mapped yet —
+ * never report success unless the device actually accepted the command.
+ */
+export function runControlCommand(
   cmd: ControlCommand,
   connected: boolean,
   detail?: string,
@@ -306,12 +356,17 @@ export function runSimulatedCommand(
   return {
     id,
     command: cmd,
-    ok: true,
-    message: detail ? `${label} queued (${detail})` : `${label} queued`,
+    ok: false,
+    message: detail
+      ? `${label} not sent (${detail}): HID control write path not implemented`
+      : `${label} not sent: HID control write path not implemented`,
     at: Date.now(),
     detail,
   };
 }
+
+/** @deprecated Use runControlCommand — kept for any stale imports during transition */
+export const runSimulatedCommand = runControlCommand;
 
 export function newId(prefix: string): string {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;

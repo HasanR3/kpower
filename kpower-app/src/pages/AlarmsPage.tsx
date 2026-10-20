@@ -1,8 +1,13 @@
-import { useMemo, useState } from "react";
-import { Bell, BellRing, CheckCircle2, ShieldAlert, Trash2 } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { Bell, CheckCircle2, ShieldAlert, Trash2 } from "lucide-react";
 import { PageHero } from "../components/PageHero";
 import type { AlarmRecord } from "../lib/appData";
-import { loadAlarms, saveAlarms } from "../lib/appData";
+import {
+  loadAlarms,
+  loadSettings,
+  saveAlarms,
+  syncAlarmsFromSnapshot,
+} from "../lib/appData";
 import type { UpsSnapshot } from "../lib/types";
 
 function severityClass(severity: AlarmRecord["severity"]): string {
@@ -18,7 +23,16 @@ function severityLabel(severity: AlarmRecord["severity"]): string {
 }
 
 export function AlarmsPage({ snapshot }: { snapshot: UpsSnapshot | null }) {
-  const [alarms, setAlarms] = useState<AlarmRecord[]>(() => loadAlarms());
+  const [alarms, setAlarms] = useState<AlarmRecord[]>(() =>
+    syncAlarmsFromSnapshot(loadAlarms(), snapshot),
+  );
+  const allowSimulate = loadSettings().simulateAlarms;
+
+  useEffect(() => {
+    const next = syncAlarmsFromSnapshot(loadAlarms(), snapshot);
+    setAlarms(next);
+    saveAlarms(next);
+  }, [snapshot]);
 
   const persist = (next: AlarmRecord[]) => {
     setAlarms(next);
@@ -46,18 +60,17 @@ export function AlarmsPage({ snapshot }: { snapshot: UpsSnapshot | null }) {
   const clear = (id: string) => {
     persist(
       alarms.map((a) =>
-        a.id === id
-          ? { ...a, active: false, acked: true, clearedAt: Date.now() }
-          : a,
+        a.id === id ? { ...a, active: false, acked: true, clearedAt: Date.now() } : a,
       ),
     );
   };
 
   const injectDemo = () => {
+    if (!allowSimulate) return;
     const demo: AlarmRecord = {
       id: `a-${Date.now()}`,
       code: "OVERLOAD",
-      message: "Output load exceeded rated capacity",
+      message: "Output load exceeded rated capacity (manual test injection)",
       severity: "critical",
       active: true,
       acked: false,
@@ -72,12 +85,13 @@ export function AlarmsPage({ snapshot }: { snapshot: UpsSnapshot | null }) {
         Icon={Bell}
         kicker="Events"
         title="Alarms"
-        subtitle="Active conditions and recent alarm history for this UPS"
+        subtitle="Active conditions synced from UPS telemetry, plus recent history"
         actions={
-          <button type="button" className="btn btn--secondary" onClick={injectDemo}>
-            <BellRing aria-hidden size={15} strokeWidth={2} />
-            Simulate alarm
-          </button>
+          allowSimulate ? (
+            <button type="button" className="btn btn--secondary" onClick={injectDemo}>
+              Inject test alarm
+            </button>
+          ) : undefined
         }
       />
 
@@ -101,9 +115,7 @@ export function AlarmsPage({ snapshot }: { snapshot: UpsSnapshot | null }) {
       </div>
 
       {liveCodes.length > 0 ? (
-        <p className="banner banner--warn">
-          Live codes from UPS: {liveCodes.join(", ")}
-        </p>
+        <p className="banner banner--warn">Live codes from UPS: {liveCodes.join(", ")}</p>
       ) : null}
 
       <div className="enterprise-grid">

@@ -137,6 +137,11 @@ export function SettingsPage() {
                 </h2>
               </div>
 
+              <p className="banner banner--warn" role="status">
+                SMTP settings are saved locally. Outbound mail delivery is not wired yet — enabling
+                this does not send messages until the mailer ships.
+              </p>
+
               <label className="toggle-row">
                 <span>
                   <strong>Enable e-mail notifications</strong>
@@ -476,11 +481,19 @@ export function SettingsPage() {
                     />
                     <span>Minimize to system tray</span>
                   </label>
+                  <label className="choice choice--plain">
+                    <input
+                      type="checkbox"
+                      checked={settings.simulateAlarms}
+                      onChange={(e) => update("simulateAlarms", e.target.checked)}
+                    />
+                    <span>Allow manual test-alarm injection (Alarms page)</span>
+                  </label>
                 </div>
 
                 <p className="settings-lead">
                   Live telemetry comes from the MGE USB UPS (VID 0463 / PID 0001) through the HID
-                  bridge (`npm run hid` or `npm run dev:live`). There is no simulator path.
+                  bridge (`npm run hid` or `npm run dev:live`). There is no telemetry simulator.
                 </p>
               </div>
             </section>
