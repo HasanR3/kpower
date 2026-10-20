@@ -1,5 +1,19 @@
 import { useEffect, useMemo, useState } from "react";
 import {
+  Activity,
+  BatteryMedium,
+  BellRing,
+  Cable,
+  ClipboardList,
+  Gauge,
+  HeartPulse,
+  History,
+  Settings2,
+  ShieldAlert,
+  Timer,
+  Zap,
+} from "lucide-react";
+import {
   Area,
   AreaChart,
   CartesianGrid,
@@ -97,6 +111,7 @@ export function OverviewPage({
           </p>
         </div>
         <div className={`health-orb health-orb--${health.band}`} aria-label={`Health ${health.score}`}>
+          <HeartPulse className="health-orb__icon" aria-hidden size={18} strokeWidth={2} />
           <div className="health-orb__score">{health.score}</div>
           <div className="health-orb__band">{bandLabel(health.band)}</div>
           <div className="health-orb__caption">Health index</div>
@@ -105,14 +120,18 @@ export function OverviewPage({
 
       <div className="kpi-rail" role="group" aria-label="Key performance indicators">
         <article className="kpi">
-          <div className="kpi__label">Link</div>
+          <div className="kpi__label">
+            <Cable aria-hidden size={14} strokeWidth={2} /> Link
+          </div>
           <div className={`kpi__value ${connected ? "is-ok" : "is-bad"}`}>
             {connected ? "Online" : "Down"}
           </div>
           <div className="kpi__meta">{connected ? snapshot?.mode ?? "—" : "No telemetry"}</div>
         </article>
         <article className="kpi">
-          <div className="kpi__label">Load</div>
+          <div className="kpi__label">
+            <Gauge aria-hidden size={14} strokeWidth={2} /> Load
+          </div>
           <div className="kpi__value kpi__value--num">
             {connected ? snapshot!.loadPercent.toFixed(0) : "—"}
             <span className="kpi__unit">%</span>
@@ -120,7 +139,9 @@ export function OverviewPage({
           <div className="kpi__meta">Output utilization</div>
         </article>
         <article className="kpi">
-          <div className="kpi__label">Battery</div>
+          <div className="kpi__label">
+            <BatteryMedium aria-hidden size={14} strokeWidth={2} /> Battery
+          </div>
           <div className="kpi__value kpi__value--num">
             {connected ? snapshot!.batteryPercent.toFixed(0) : "—"}
             <span className="kpi__unit">%</span>
@@ -130,14 +151,18 @@ export function OverviewPage({
           </div>
         </article>
         <article className="kpi">
-          <div className="kpi__label">Alarms</div>
+          <div className="kpi__label">
+            <BellRing aria-hidden size={14} strokeWidth={2} /> Alarms
+          </div>
           <div className={`kpi__value kpi__value--num ${activeAlarms.length ? "is-warn" : ""}`}>
             {activeAlarms.length}
           </div>
           <div className="kpi__meta">Active conditions</div>
         </article>
         <article className="kpi">
-          <div className="kpi__label">Policy window</div>
+          <div className="kpi__label">
+            <Timer aria-hidden size={14} strokeWidth={2} /> Policy window
+          </div>
           <div className="kpi__value kpi__value--num">
             {health.minutesToPolicyShutdown == null
               ? "—"
@@ -155,7 +180,9 @@ export function OverviewPage({
       <div className="overview-grid">
         <section className="panel panel--chart">
           <div className="panel__head">
-            <h2>Load & reserve</h2>
+            <h2>
+              <Activity aria-hidden size={16} strokeWidth={2} /> Load & reserve
+            </h2>
             <span className="panel__tag">Rolling samples</span>
           </div>
           {chartData.length < 2 ? (
@@ -225,7 +252,9 @@ export function OverviewPage({
 
         <aside className="panel">
           <div className="panel__head">
-            <h2>Risk factors</h2>
+            <h2>
+              <ShieldAlert aria-hidden size={16} strokeWidth={2} /> Risk factors
+            </h2>
           </div>
           <ul className="factor-list">
             {health.factors.map((f) => (
@@ -257,7 +286,9 @@ export function OverviewPage({
 
         <section className="panel">
           <div className="panel__head">
-            <h2>Electrical snapshot</h2>
+            <h2>
+              <Zap aria-hidden size={16} strokeWidth={2} /> Electrical snapshot
+            </h2>
             <button type="button" className="linkish" onClick={() => onNavigate("device")}>
               Device detail
             </button>
@@ -292,7 +323,9 @@ export function OverviewPage({
 
         <section className="panel">
           <div className="panel__head">
-            <h2>Control activity</h2>
+            <h2>
+              <ClipboardList aria-hidden size={16} strokeWidth={2} /> Control activity
+            </h2>
             <button type="button" className="linkish" onClick={() => onNavigate("control")}>
               Commands
             </button>
@@ -318,13 +351,13 @@ export function OverviewPage({
 
       <div className="overview-actions">
         <button type="button" className="btn btn--primary" onClick={() => onNavigate("control")}>
-          Issue command
+          <Zap aria-hidden size={15} strokeWidth={2} /> Issue command
         </button>
         <button type="button" className="btn btn--secondary" onClick={() => onNavigate("history")}>
-          Audit history
+          <History aria-hidden size={15} strokeWidth={2} /> Audit history
         </button>
         <button type="button" className="btn btn--secondary" onClick={() => onNavigate("settings")}>
-          Policies
+          <Settings2 aria-hidden size={15} strokeWidth={2} /> Policies
         </button>
       </div>
     </section>

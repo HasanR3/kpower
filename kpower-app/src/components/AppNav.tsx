@@ -1,3 +1,14 @@
+import type { LucideIcon } from "lucide-react";
+import {
+  Bell,
+  CalendarClock,
+  Gauge,
+  History,
+  LayoutDashboard,
+  Settings,
+  Zap,
+} from "lucide-react";
+
 export type AppRoute =
   | "overview"
   | "device"
@@ -7,14 +18,14 @@ export type AppRoute =
   | "history"
   | "settings";
 
-const ITEMS: { id: AppRoute; label: string }[] = [
-  { id: "overview", label: "Overview" },
-  { id: "device", label: "Device" },
-  { id: "alarms", label: "Alarms" },
-  { id: "schedule", label: "Schedule" },
-  { id: "control", label: "Control" },
-  { id: "history", label: "History" },
-  { id: "settings", label: "Settings" },
+const ITEMS: { id: AppRoute; label: string; Icon: LucideIcon }[] = [
+  { id: "overview", label: "Overview", Icon: LayoutDashboard },
+  { id: "device", label: "Device", Icon: Gauge },
+  { id: "alarms", label: "Alarms", Icon: Bell },
+  { id: "schedule", label: "Schedule", Icon: CalendarClock },
+  { id: "control", label: "Control", Icon: Zap },
+  { id: "history", label: "History", Icon: History },
+  { id: "settings", label: "Settings", Icon: Settings },
 ];
 
 export function AppNav({
@@ -26,14 +37,15 @@ export function AppNav({
 }) {
   return (
     <nav className="app-nav" aria-label="Main">
-      {ITEMS.map((item) => (
+      {ITEMS.map(({ id, label, Icon }) => (
         <button
-          key={item.id}
+          key={id}
           type="button"
-          className={route === item.id ? "nav-btn nav-btn--active" : "nav-btn"}
-          onClick={() => onNavigate(item.id)}
+          className={route === id ? "nav-btn nav-btn--active" : "nav-btn"}
+          onClick={() => onNavigate(id)}
         >
-          {item.label}
+          <Icon className="nav-btn__icon" aria-hidden size={16} strokeWidth={2} />
+          <span>{label}</span>
         </button>
       ))}
     </nav>

@@ -38,6 +38,27 @@ body {
   color: #9aa8b8;
 }
 
+.brand-mark {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-weight: 650;
+  letter-spacing: -0.03em;
+  color: #f4f7fb;
+  margin-right: 0.35rem;
+}
+
+.brand-mark__icon {
+  color: #7eb6ff;
+}
+
+.status-pill,
+.status-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
 .status-pill {
   font-size: 0.8rem;
   font-weight: 600;
@@ -71,6 +92,9 @@ body {
 }
 
 .nav-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
   border: 1px solid transparent;
   background: transparent;
   color: var(--muted);
@@ -78,6 +102,11 @@ body {
   border-radius: 6px;
   cursor: pointer;
   font: inherit;
+}
+
+.nav-btn__icon {
+  flex-shrink: 0;
+  opacity: 0.9;
 }
 
 .nav-btn:hover {
@@ -301,6 +330,9 @@ body {
 }
 
 .btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
   font: inherit;
   cursor: pointer;
   border: 1px solid var(--border);
@@ -503,6 +535,7 @@ body {
 }
 
 .health-orb {
+  position: relative;
   min-width: 148px;
   padding: 1rem 1.15rem 0.95rem;
   border: 1px solid var(--border-strong);
@@ -511,6 +544,14 @@ body {
     linear-gradient(165deg, #ffffff 0%, var(--surface-elevated) 55%, #f3f6fb 100%);
   box-shadow: var(--shadow-soft);
   text-align: right;
+}
+
+.health-orb__icon {
+  position: absolute;
+  top: 0.85rem;
+  left: 0.95rem;
+  color: var(--muted);
+  opacity: 0.85;
 }
 
 .health-orb__score {
@@ -575,6 +616,9 @@ body {
 }
 
 .kpi__label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
   font-size: 0.72rem;
   font-weight: 600;
   letter-spacing: 0.06em;
@@ -660,10 +704,31 @@ body {
 }
 
 .panel__head h2 {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
   margin: 0;
   font-size: 0.95rem;
   font-weight: 650;
   letter-spacing: -0.01em;
+}
+
+.health-orb {
+  position: relative;
+}
+
+.health-orb__icon {
+  position: absolute;
+  top: 0.85rem;
+  left: 0.95rem;
+  color: var(--muted);
+  opacity: 0.85;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
 }
 
 .panel__tag {
