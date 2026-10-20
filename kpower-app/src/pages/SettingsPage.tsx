@@ -48,30 +48,40 @@ export function SettingsPage() {
         subtitle="Polling, communication, shutdown policy, and workstation behavior"
       />
 
-      <div className="stat-strip">
+      <div className="stat-strip stat-strip--four">
         <article className="stat-chip">
           <span className="stat-chip__label">Poll interval</span>
-          <strong>{settings.pollIntervalMs} ms</strong>
+          <strong className="stat-chip__text">{settings.pollIntervalMs} milliseconds</strong>
         </article>
         <article className="stat-chip">
           <span className="stat-chip__label">Communication</span>
-          <strong>{settings.commsType === "usb" ? "USB HID" : "Serial"}</strong>
+          <strong className="stat-chip__text">
+            {settings.commsType === "usb" ? "USB HID device" : "Serial port"}
+          </strong>
         </article>
         <article className="stat-chip">
           <span className="stat-chip__label">Battery policy</span>
-          <strong>≤ {settings.shutdownBatteryPercent}%</strong>
+          <strong className="stat-chip__text">
+            At or below {settings.shutdownBatteryPercent}%
+          </strong>
+        </article>
+        <article className="stat-chip">
+          <span className="stat-chip__label">Runtime policy</span>
+          <strong className="stat-chip__text">
+            At or below {settings.shutdownRuntimeSeconds} seconds
+          </strong>
         </article>
       </div>
 
-      <form onSubmit={onSave}>
-        <div className="enterprise-grid">
-          <section className="panel">
+      <form className="settings-form" onSubmit={onSave}>
+        <div className="settings-grid">
+          <section className="panel settings-card">
             <div className="panel__head">
               <h2>
                 <Cable aria-hidden size={16} strokeWidth={2} /> Connectivity
               </h2>
             </div>
-            <div className="form-stack">
+            <div className="form-stack settings-card__body">
               <label className="field">
                 <span>Poll interval (milliseconds)</span>
                 <input
@@ -99,22 +109,22 @@ export function SettingsPage() {
                   value={settings.commsType}
                   onChange={(e) => update("commsType", e.target.value as AppSettings["commsType"])}
                 >
-                  <option value="usb">USB HID</option>
-                  <option value="serial">Serial</option>
+                  <option value="usb">USB HID device</option>
+                  <option value="serial">Serial port</option>
                 </select>
               </label>
             </div>
           </section>
 
-          <section className="panel">
+          <section className="panel settings-card">
             <div className="panel__head">
               <h2>
                 <Shield aria-hidden size={16} strokeWidth={2} /> Protective shutdown
               </h2>
             </div>
-            <div className="form-stack">
+            <div className="form-stack settings-card__body">
               <label className="field">
-                <span>Shutdown when battery capacity is at or below (%)</span>
+                <span>Shutdown when battery capacity is at or below (percent)</span>
                 <input
                   type="number"
                   min={1}
@@ -133,17 +143,21 @@ export function SettingsPage() {
                   onChange={(e) => update("shutdownRuntimeSeconds", Number(e.target.value))}
                 />
               </label>
+              <p className="settings-note">
+                These thresholds drive the automatic safe-shutdown countdown once native shutdown
+                policy is enabled.
+              </p>
             </div>
           </section>
 
-          <section className="panel">
+          <section className="panel settings-card">
             <div className="panel__head">
               <h2>
                 <Settings aria-hidden size={16} strokeWidth={2} /> Workstation
               </h2>
             </div>
-            <div className="form-stack">
-              <label className="choice">
+            <div className="form-stack settings-card__body">
+              <label className="choice choice--row">
                 <input
                   type="checkbox"
                   checked={settings.startWithWindows}
@@ -151,7 +165,7 @@ export function SettingsPage() {
                 />
                 <span>Start with Windows</span>
               </label>
-              <label className="choice">
+              <label className="choice choice--row">
                 <input
                   type="checkbox"
                   checked={settings.minimizeToTray}
@@ -159,7 +173,7 @@ export function SettingsPage() {
                 />
                 <span>Minimize to system tray</span>
               </label>
-              <label className="choice">
+              <label className="choice choice--row">
                 <input
                   type="checkbox"
                   checked={settings.simulateAlarms}
@@ -170,46 +184,54 @@ export function SettingsPage() {
             </div>
           </section>
 
-          <section className="panel">
+          <section className="panel settings-card">
             <div className="panel__head">
               <h2>
                 <FlaskConical aria-hidden size={16} strokeWidth={2} /> Simulator lab
               </h2>
               <span className="panel__tag">Development</span>
             </div>
-            <p className="muted" style={{ marginTop: 0 }}>
-              Drive telemetry states without UPS hardware while HID reverse-engineering is incomplete.
-            </p>
-            <div className="row-actions">
-              <button type="button" className="btn btn--secondary" onClick={() => simulatorSetConnected(true)}>
-                <Cable aria-hidden size={15} strokeWidth={2} />
-                Connect UPS
-              </button>
-              <button type="button" className="btn btn--secondary" onClick={() => simulatorSetConnected(false)}>
-                <Unplug aria-hidden size={15} strokeWidth={2} />
-                Disconnect UPS
-              </button>
-              <button type="button" className="btn btn--secondary" onClick={() => simulatorSetMode("battery")}>
-                <BatteryCharging aria-hidden size={15} strokeWidth={2} />
-                Battery mode
-              </button>
-              <button type="button" className="btn btn--secondary" onClick={() => simulatorSetMode("line")}>
-                <Zap aria-hidden size={15} strokeWidth={2} />
-                Line mode
-              </button>
+            <div className="settings-card__body">
+              <p className="settings-note">
+                Drive telemetry states without UPS hardware while the HID adapter is incomplete.
+              </p>
+              <div className="sim-actions">
+                <button type="button" className="btn btn--secondary" onClick={() => simulatorSetConnected(true)}>
+                  <Cable aria-hidden size={15} strokeWidth={2} />
+                  Connect UPS
+                </button>
+                <button type="button" className="btn btn--secondary" onClick={() => simulatorSetConnected(false)}>
+                  <Unplug aria-hidden size={15} strokeWidth={2} />
+                  Disconnect UPS
+                </button>
+                <button type="button" className="btn btn--secondary" onClick={() => simulatorSetMode("battery")}>
+                  <BatteryCharging aria-hidden size={15} strokeWidth={2} />
+                  Battery mode
+                </button>
+                <button type="button" className="btn btn--secondary" onClick={() => simulatorSetMode("line")}>
+                  <Zap aria-hidden size={15} strokeWidth={2} />
+                  Line mode
+                </button>
+              </div>
             </div>
           </section>
         </div>
 
-        <div className="settings-footer">
-          <button type="submit" className="btn btn--primary">
-            <Save aria-hidden size={15} strokeWidth={2} />
-            Save settings
-          </button>
-          <button type="button" className="btn btn--secondary" onClick={onReset}>
-            Reset defaults
-          </button>
-          {saved ? <p className="flash">Settings saved.</p> : null}
+        <div className="settings-footer panel">
+          <div className="settings-footer__copy">
+            <strong>Apply configuration</strong>
+            <p className="muted tiny">Changes are stored locally until the native settings store ships.</p>
+          </div>
+          <div className="row-actions">
+            <button type="submit" className="btn btn--primary">
+              <Save aria-hidden size={15} strokeWidth={2} />
+              Save settings
+            </button>
+            <button type="button" className="btn btn--secondary" onClick={onReset}>
+              Reset defaults
+            </button>
+            {saved ? <p className="flash">Settings saved.</p> : null}
+          </div>
         </div>
       </form>
     </section>
