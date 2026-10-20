@@ -181,9 +181,21 @@ export function DevicePage({ snapshot }: { snapshot: UpsSnapshot | null }) {
       {connected && tab === "mimic" ? <PowerTopology snapshot={snapshot} /> : null}
 
       {connected && tab === "dial" ? (
-        <div className="dial-row panel">
-          <GaugeDial label="UPS load" value={snapshot!.loadPercent} max={100} unit="%" />
-          <GaugeDial label="Battery capacity" value={snapshot!.batteryPercent} max={100} unit="%" />
+        <div className="dial-row">
+          <GaugeDial
+            label="UPS load"
+            value={snapshot!.loadPercent}
+            max={100}
+            unit="%"
+            variant="load"
+          />
+          <GaugeDial
+            label="Battery capacity"
+            value={snapshot!.batteryPercent}
+            max={100}
+            unit="%"
+            variant="battery"
+          />
         </div>
       ) : null}
 
