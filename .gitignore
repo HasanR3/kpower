@@ -1,0 +1,7 @@
+node_modules/
+dist/
+.superpowers/
+target/
+*.log
+.DS_Store
+kpower-app/src-tauri/target/

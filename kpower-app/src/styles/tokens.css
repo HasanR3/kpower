@@ -1,0 +1,12 @@
+:root {
+  --bg: #f4f6f8;
+  --surface: #ffffff;
+  --text: #1a2332;
+  --muted: #5c6b7a;
+  --accent: #2f6fed;
+  --ok: #1f9d55;
+  --warn: #c47d0e;
+  --danger: #d92d20;
+  --border: #d8dee6;
+  --font: "Segoe UI", "IBM Plex Sans", system-ui, sans-serif;
+}
